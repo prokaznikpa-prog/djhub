@@ -1,0 +1,176 @@
+import { useState, useMemo, useEffect, useCallback, useDeferredValue } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { MUSIC_STYLES } from "@/data/djhub-data";
+import DjCard from "@/components/DjCard";
+import { Filter, SlidersHorizontal, Search, X } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import type { Tables } from "@/integrations/supabase/types";
+import { cachedRequest, getCachedValue, setCachedValue } from "@/lib/requestCache";
+
+const DjCatalog = () => {
+  const cacheKey = "catalog:djs:active";
+  const [allDjs, setAllDjs] = useState<Tables<"dj_profiles">[]>(() => getCachedValue<Tables<"dj_profiles">[]>(cacheKey, { allowStale: true }) ?? []);
+  const [loading, setLoading] = useState(() => !getCachedValue<Tables<"dj_profiles">[]>(cacheKey, { allowStale: true }));
+  const [showFilters, setShowFilters] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterCity, setFilterCity] = useState("");
+  const [filterStyle, setFilterStyle] = useState("");
+  const [filterExperience, setFilterExperience] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "price">("name");
+  const { isAdmin } = useAuth();
+  const deferredSearch = useDeferredValue(search);
+
+  useEffect(() => {
+    const cached = getCachedValue<Tables<"dj_profiles">[]>(cacheKey, { allowStale: true });
+    if (cached) {
+      setAllDjs(cached);
+      setLoading(false);
+    }
+
+    cachedRequest(cacheKey, async () => {
+      const { data } = await supabase.from("dj_profiles").select("*").eq("status", "active").order("created_at", { ascending: false });
+      return data ?? [];
+    }).then((data) => {
+      setAllDjs(data);
+      data.forEach((dj) => setCachedValue(`dj:${dj.id}`, dj));
+      setLoading(false);
+    });
+  }, []);
+
+  const handleDeleteDj = useCallback(async (id: string) => {
+    if (!confirm("Скрыть DJ из маркетплейса?")) return;
+    const { error, count } = await supabase.from("dj_profiles").update({ status: "hidden" }, { count: "exact" }).eq("id", id);
+    if (error) {
+      toast.error("Не удалось скрыть DJ");
+      return;
+    }
+    if (count === 0) {
+      toast.error("Не удалось скрыть — нет прав администратора");
+      return;
+    }
+    setAllDjs((prev) => prev.filter((dj) => dj.id !== id));
+    toast.success("DJ скрыт из маркетплейса");
+  }, []);
+
+  const cities = useMemo(() => [...new Set(allDjs.map((d) => d.city))].sort(), [allDjs]);
+  const experiences = useMemo(() => [...new Set(allDjs.map((d) => d.experience).filter(Boolean))].sort(), [allDjs]);
+
+  const hasActiveFilters = !!(filterCity || filterStyle || filterExperience || search);
+
+  const resetFilters = useCallback(() => {
+    setSearch("");
+    setFilterCity("");
+    setFilterStyle("");
+    setFilterExperience("");
+  }, []);
+
+  const filtered = useMemo(() => {
+    let list = [...allDjs];
+    if (deferredSearch) {
+      const q = deferredSearch.toLowerCase();
+      list = list.filter((d) =>
+        d.name.toLowerCase().includes(q) ||
+        d.city.toLowerCase().includes(q) ||
+        d.styles.some((s) => s.toLowerCase().includes(q))
+      );
+    }
+    if (filterCity) list = list.filter((d) => d.city === filterCity);
+    if (filterStyle) list = list.filter((d) => d.styles.includes(filterStyle));
+    if (filterExperience) list = list.filter((d) => d.experience === filterExperience);
+    if (sortBy === "price") {
+      list.sort((a, b) => {
+        const numA = parseInt(a.price.replace(/\D/g, "")) || 0;
+        const numB = parseInt(b.price.replace(/\D/g, "")) || 0;
+        return numA - numB;
+      });
+    }
+    return list;
+  }, [allDjs, deferredSearch, filterCity, filterStyle, filterExperience, sortBy]);
+
+  const selectCls = "rounded-xl border border-border/40 bg-background/50 px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30";
+
+  return (
+    <div className="min-h-screen pt-20 pb-12">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between mb-5">
+          <h1 className="text-2xl font-bold">
+            <span className="text-primary neon-text">DJ</span> каталог
+          </h1>
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors ${
+              showFilters ? "border-primary/40 bg-primary/10 text-primary" : "border-border/40 bg-card/50 text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Filter className="h-3 w-3" /> Фильтры
+          </button>
+        </div>
+
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Поиск по имени, городу или стилю..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-border/40 bg-background/50 pl-9 pr-9 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {showFilters && (
+          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-border/30 bg-card/40 backdrop-blur-sm px-4 py-3">
+            <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+            <select className={selectCls} value={filterCity} onChange={(e) => setFilterCity(e.target.value)}>
+              <option value="">Все города</option>
+              {cities.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select className={selectCls} value={filterStyle} onChange={(e) => setFilterStyle(e.target.value)}>
+              <option value="">Все стили</option>
+              {MUSIC_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select className={selectCls} value={filterExperience} onChange={(e) => setFilterExperience(e.target.value)}>
+              <option value="">Любой опыт</option>
+              {experiences.map((e) => <option key={e} value={e!}>{e}</option>)}
+            </select>
+            <select className={selectCls} value={sortBy} onChange={(e) => setSortBy(e.target.value as "name" | "price")}>
+              <option value="name">По имени</option>
+              <option value="price">По цене</option>
+            </select>
+            {hasActiveFilters && (
+              <button onClick={resetFilters} className="text-[10px] text-primary hover:underline ml-1">
+                Сбросить
+              </button>
+            )}
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-muted-foreground text-center py-12 text-sm">Загрузка...</p>
+        ) : filtered.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {filtered.map((dj, i) => (
+              <DjCard key={dj.id} dj={dj} index={i} isAdmin={isAdmin} onDelete={handleDeleteDj} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16 space-y-3">
+            <p className="text-muted-foreground text-sm">Ничего не найдено</p>
+            {hasActiveFilters && (
+              <button onClick={resetFilters} className="text-xs text-primary hover:underline">
+                Сбросить фильтры
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default DjCatalog;

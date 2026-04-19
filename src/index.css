@@ -1,0 +1,164 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 6%;
+    --foreground: 0 0% 93%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 0 0% 93%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 0 0% 93%;
+
+    --primary: 142 71% 45%;
+    --primary-foreground: 220 20% 6%;
+
+    --secondary: 220 15% 15%;
+    --secondary-foreground: 0 0% 85%;
+
+    --muted: 220 15% 13%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 142 71% 45%;
+    --accent-foreground: 220 20% 6%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 15% 18%;
+    --input: 220 15% 18%;
+    --ring: 142 71% 45%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 220 18% 8%;
+    --sidebar-foreground: 0 0% 93%;
+    --sidebar-primary: 142 71% 45%;
+    --sidebar-primary-foreground: 220 20% 6%;
+    --sidebar-accent: 220 15% 15%;
+    --sidebar-accent-foreground: 0 0% 93%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 142 71% 45%;
+
+    --neon-glow: 0 0 20px hsl(142 71% 45% / 0.3);
+    --neon-glow-strong: 0 0 30px hsl(142 71% 45% / 0.5);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    background-image: url('@/assets/bg-main.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: hsl(220 20% 6% / 0.75);
+    z-index: 0;
+    pointer-events: none;
+  }
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@layer utilities {
+  .neon-text {
+    text-shadow: 0 0 10px hsl(142 71% 45% / 0.5), 0 0 20px hsl(142 71% 45% / 0.3);
+  }
+  .neon-border {
+    box-shadow: 0 0 10px hsl(142 71% 45% / 0.2), inset 0 0 10px hsl(142 71% 45% / 0.05);
+  }
+
+  /* Card hover — shadow only, no transform to avoid page shake */
+  .card-hover {
+    @apply transition-[box-shadow,border-color] duration-200 ease-out;
+  }
+  .card-hover:hover {
+    box-shadow: 0 0 20px hsl(142 71% 45% / 0.12), 0 4px 12px hsl(0 0% 0% / 0.3);
+  }
+
+  /* Image zoom on card hover */
+  .card-hover .card-img {
+    @apply transition-transform duration-300 ease-out;
+  }
+  .card-hover:hover .card-img {
+    transform: scale(1.05);
+  }
+
+  /* Button hover */
+  .btn-glow {
+    @apply transition-all duration-150 ease-out;
+  }
+  .btn-glow:hover {
+    box-shadow: 0 0 14px hsl(142 71% 45% / 0.25);
+    transform: translateY(-1px);
+  }
+  .btn-glow:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  /* Style pill hover */
+  .pill-glow {
+    @apply transition-all duration-150;
+  }
+  .pill-glow:hover {
+    box-shadow: 0 0 8px hsl(142 71% 45% / 0.3);
+  }
+
+  /* Input focus glow */
+  .input-glow:focus {
+    box-shadow: 0 0 0 2px hsl(142 71% 45% / 0.25), 0 0 12px hsl(142 71% 45% / 0.1);
+  }
+
+  /* Glass effect */
+  .glass {
+    background: hsl(220 18% 10% / 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Nav link hover */
+  .nav-link {
+    @apply relative transition-all duration-150;
+  }
+  .nav-link::after {
+    content: '';
+    @apply absolute bottom-0 left-1/2 w-0 h-px bg-primary transition-all duration-200;
+    transform: translateX(-50%);
+  }
+  .nav-link:hover::after,
+  .nav-link.active::after {
+    @apply w-full;
+  }
+
+  /* Scroll reveal */
+  .scroll-reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+  }
+  .scroll-reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
