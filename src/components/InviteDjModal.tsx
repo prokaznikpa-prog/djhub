@@ -78,7 +78,7 @@ const InviteDjModal = ({ venueId, djId, djName, onClose }: Props) => {
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Публикация</label>
               <select
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="djhub-select w-full text-sm"
                 value={selectedPost}
                 onChange={(e) => setSelectedPost(e.target.value)}
               >

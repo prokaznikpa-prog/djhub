@@ -3,6 +3,7 @@ import type { Gig } from "@/data/djhub-data";
 import { Link } from "react-router-dom";
 import { MapPin, Clock, Music, Tag, Heart } from "lucide-react";
 import { isFavoriteGig, toggleFavoriteGig, getCurrentDjProfile } from "@/data/store";
+import { getCityLabel } from "@/lib/geography";
 
 const GigCard = ({ gig, index = 0 }: { gig: Gig; index?: number }) => {
   const isClosed = gig.status === "closed";
@@ -43,7 +44,7 @@ const GigCard = ({ gig, index = 0 }: { gig: Gig; index?: number }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <MapPin className="h-3 w-3 opacity-60" />
-            {gig.city}
+            {getCityLabel(gig.city)}
           </div>
           <span className="text-xs font-mono text-primary">{gig.budget}</span>
         </div>

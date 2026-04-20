@@ -9,12 +9,18 @@ import type { Tables } from "@/integrations/supabase/types";
 import { getCityLabel } from "@/lib/geography";
 import { getDjAvailabilityLabel } from "@/lib/djOptions";
 import { getDjExperienceLabel } from "@/lib/djOptions";
-import { cachedRequest, getCachedValue, setCachedValue } from "@/lib/requestCache";
+import { getCachedValue, setCachedValue } from "@/lib/requestCache";
 const DjProfile = () => {
   const { id } = useParams();
   const { venueProfile } = useAuth();
-  const [dj, setDj] = useState<Tables<"dj_profiles"> | null>(() => id ? getCachedValue<Tables<"dj_profiles">>(`dj:${id}`) : null);
-  const [loading, setLoading] = useState(() => id ? !getCachedValue<Tables<"dj_profiles">>(`dj:${id}`) : true);
+  const [dj, setDj] = useState<Tables<"dj_profiles"> | null>(() => {
+    const cached = id ? getCachedValue<Tables<"dj_profiles">>(`dj:${id}`) : null;
+    return cached?.status === "active" ? cached : null;
+  });
+  const [loading, setLoading] = useState(() => {
+    const cached = id ? getCachedValue<Tables<"dj_profiles">>(`dj:${id}`) : null;
+    return id ? cached?.status !== "active" : true;
+  });
   const [showInvite, setShowInvite] = useState(false);
   const [showReviews, setShowReviews] = useState(false);
   const reviewData = useReviewsForProfile(id);
@@ -23,14 +29,11 @@ const DjProfile = () => {
     if (!id) return;
     const cacheKey = `dj:${id}`;
     const cached = getCachedValue<Tables<"dj_profiles">>(cacheKey);
-    if (cached) {
+    if (cached?.status === "active") {
       setDj(cached);
       setLoading(false);
     }
-    cachedRequest(cacheKey, async () => {
-      const { data } = await supabase.from("dj_profiles").select("*").eq("id", id).maybeSingle();
-      return data;
-    }).then((data) => {
+    supabase.from("dj_profiles").select("*").eq("id", id).eq("status", "active").maybeSingle().then(({ data }) => {
       if (data) setCachedValue(cacheKey, data);
       setDj(data);
       setLoading(false);

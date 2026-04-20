@@ -1,5 +1,7 @@
+import { getCleanDisplayLabel } from "@/lib/displayLabels";
+
 export const DJ_AVAILABILITY_OPTIONS = [
- { value: "", label: "Выбрать" },
+  { value: "", label: "Выбрать" },
   { value: "weekdays", label: "Будни" },
   { value: "weekends", label: "Выходные" },
   { value: "any-day", label: "Любые дни" },
@@ -9,10 +11,11 @@ export const DJ_AVAILABILITY_OPTIONS = [
 export function getDjAvailabilityLabel(value: string | null | undefined): string {
   if (!value) return "";
   const option = DJ_AVAILABILITY_OPTIONS.find((item) => item.value === value);
-  return option?.label ?? value;
+  return option?.label ?? getCleanDisplayLabel(value);
 }
+
 export const DJ_EXPERIENCE_OPTIONS = [
-    { value: "", label: "Выбрать" },
+  { value: "", label: "Выбрать" },
   { value: "no-experience", label: "Нет опыта" },
   { value: "up-to-6-months", label: "До 6 месяцев" },
   { value: "6-to-12-months", label: "6–12 месяцев" },
@@ -20,8 +23,8 @@ export const DJ_EXPERIENCE_OPTIONS = [
   { value: "2-plus-years", label: "Более 2 лет" },
 ] as const;
 
-export function getDjExperienceLabel(exp: string | null): string {
+export function getDjExperienceLabel(exp: string | null | undefined): string {
   if (!exp) return "";
   const option = DJ_EXPERIENCE_OPTIONS.find((item) => item.value === exp);
-  return option?.label ?? exp;
+  return option?.label ?? getCleanDisplayLabel(exp);
 }

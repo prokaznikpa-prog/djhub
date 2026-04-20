@@ -12,12 +12,18 @@ import {
   VENUE_EQUIPMENT_OPTIONS,
   getVenueOptionLabel,
 } from "@/lib/venueOptions";
-import { cachedRequest, getCachedValue, setCachedValue } from "@/lib/requestCache";
+import { getCachedValue, setCachedValue } from "@/lib/requestCache";
 
 const VenueProfile = () => {
   const { id } = useParams();
-  const [venue, setVenue] = useState<Tables<"venue_profiles"> | null>(() => id ? getCachedValue<Tables<"venue_profiles">>(`venue:${id}`) : null);
-  const [loading, setLoading] = useState(() => id ? !getCachedValue<Tables<"venue_profiles">>(`venue:${id}`) : true);
+  const [venue, setVenue] = useState<Tables<"venue_profiles"> | null>(() => {
+    const cached = id ? getCachedValue<Tables<"venue_profiles">>(`venue:${id}`) : null;
+    return cached?.status === "active" ? cached : null;
+  });
+  const [loading, setLoading] = useState(() => {
+    const cached = id ? getCachedValue<Tables<"venue_profiles">>(`venue:${id}`) : null;
+    return id ? cached?.status !== "active" : true;
+  });
   const [showReviews, setShowReviews] = useState(false);
   const { posts } = useVenuePostsByVenue(id);
   const reviewData = useReviewsForProfile(id);
@@ -35,26 +41,19 @@ const VenueProfile = () => {
 
       const cacheKey = `venue:${id}`;
       const cached = getCachedValue<Tables<"venue_profiles">>(cacheKey);
-      if (cached) {
+      if (cached?.status === "active") {
         setVenue(cached);
         setLoading(false);
       } else {
         setLoading(true);
       }
 
-      const data = await cachedRequest<Tables<"venue_profiles"> | null>(cacheKey, async () => {
-        const { data, error } = await supabase
-          .from("venue_profiles")
-          .select("*")
-          .eq("id", id)
-          .maybeSingle();
-        if (error) {
-          console.error("Failed to load venue", error);
-          return null;
-        }
-        return data;
-      });
-      const error = null;
+      const { data, error } = await supabase
+        .from("venue_profiles")
+        .select("*")
+        .eq("id", id)
+        .eq("status", "active")
+        .maybeSingle();
 
       if (!isMounted) return;
 

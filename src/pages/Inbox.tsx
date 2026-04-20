@@ -59,6 +59,11 @@ const BOOKING_ACTION_LABEL: Partial<Record<BookingStatus, string>> = {
   cancelled: "Отменить",
 };
 
+const QUICK_REPLIES: Record<ChatParticipant["kind"], string[]> = {
+  dj: ["Свободен в эту дату", "Какие условия?", "Готов сыграть"],
+  venue: ["Какая цена?", "На сколько часов?", "Когда можете?"],
+};
+
 const BookingStatusControls = memo(({
   thread,
   participant,
@@ -195,7 +200,7 @@ const BookingStatusControls = memo(({
           <select
             value={reviewRating}
             onChange={(event) => setReviewRating(Number(event.target.value))}
-            className="rounded-lg border border-border bg-background px-2 py-1 text-[10px] text-foreground"
+            className="djhub-select h-7 px-2 pr-7 text-[10px]"
           >
             {[5, 4, 3, 2, 1].map((rating) => (
               <option key={rating} value={rating}>{rating}</option>
@@ -490,6 +495,9 @@ const ChatMessages = memo(({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const previousThreadId = useRef<string | null>(null);
+  const quickReplies = QUICK_REPLIES[participant.kind];
+  const lastMessage = messages[messages.length - 1];
+  const showResponseSpeedHint = !!lastMessage && Date.now() - new Date(lastMessage.createdAt).getTime() > 3 * 60 * 60 * 1000;
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -568,6 +576,7 @@ const ChatMessages = memo(({
           <p className="text-xs text-muted-foreground">Загрузка сообщений...</p>
         ) : messages.length === 0 ? (
           <div className="rounded-xl border border-border/50 bg-card/60 p-4 text-center">
+            <p className="text-sm font-medium text-foreground">Начните диалог — быстрые ответы повышают шанс сделки</p>
             <p className="text-sm font-medium text-foreground">Обсудите детали бронирования</p>
             <p className="mt-1 text-xs text-muted-foreground">Время, сет, условия и финальное подтверждение лучше держать в одном месте.</p>
           </div>
@@ -606,7 +615,23 @@ const ChatMessages = memo(({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2 border-t border-white/10 bg-card/55 p-3">
+      <div className="border-t border-white/10 bg-card/55 p-3">
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          {quickReplies.map((reply) => (
+            <button
+              key={reply}
+              type="button"
+              onClick={() => setText(reply)}
+              className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10"
+            >
+              {reply}
+            </button>
+          ))}
+        </div>
+        {showResponseSpeedHint && (
+          <p className="mb-2 text-[10px] font-medium text-primary/80">Ответьте быстрее, чтобы не потерять сделку</p>
+        )}
+        <div className="flex items-center gap-2">
         <input
           className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm transition-colors placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
           value={text}
@@ -630,6 +655,7 @@ const ChatMessages = memo(({
           Отправить
         </button>
       </div>
+    </div>
     </div>
   );
 });

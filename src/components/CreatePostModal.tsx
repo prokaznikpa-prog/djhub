@@ -96,6 +96,7 @@ const CreatePostModal = ({ venueId, venueCity, onClose, onCreated }: Props) => {
   };
 
   const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30";
+  const selectCls = "djhub-select w-full text-sm";
   const labelCls = "text-xs font-medium text-muted-foreground mb-1 block";
 
   return (
@@ -134,7 +135,7 @@ const CreatePostModal = ({ venueId, venueCity, onClose, onCreated }: Props) => {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Город</label>
-            <select className={inputCls} value={city} onChange={(e) => setCity(e.target.value)}>
+            <select className={selectCls} value={city} onChange={(e) => setCity(e.target.value)}>
               <option value="">Выбрать</option>
               {CITY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -181,7 +182,7 @@ const CreatePostModal = ({ venueId, venueCity, onClose, onCreated }: Props) => {
             </div>
             <div>
               <label className={labelCls}>Длительность</label>
-              <select className={inputCls} value={duration} onChange={(e) => setDuration(e.target.value)}>
+              <select className={selectCls} value={duration} onChange={(e) => setDuration(e.target.value)}>
                 <option value="">Выбрать</option>
                 {GIG_DURATION_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -215,7 +216,7 @@ const CreatePostModal = ({ venueId, venueCity, onClose, onCreated }: Props) => {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Расписание</label>
-              <select className={inputCls} value={schedule} onChange={(e) => setSchedule(e.target.value)}>
+              <select className={selectCls} value={schedule} onChange={(e) => setSchedule(e.target.value)}>
                 <option value="">Выбрать</option>
                 {RESIDENCY_SCHEDULE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -224,7 +225,7 @@ const CreatePostModal = ({ venueId, venueCity, onClose, onCreated }: Props) => {
             </div>
             <div>
               <label className={labelCls}>Частота</label>
-              <select className={inputCls} value={frequency} onChange={(e) => setFrequency(e.target.value)}>
+              <select className={selectCls} value={frequency} onChange={(e) => setFrequency(e.target.value)}>
                 <option value="">Выбрать</option>
                 {RESIDENCY_FREQUENCY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>

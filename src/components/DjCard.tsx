@@ -15,10 +15,12 @@ interface DjCardProps {
   dj: DjProfileRow;
   index?: number;
   isAdmin?: boolean;
+  isBestMatch?: boolean;
+  matchReasons?: string[];
   onDelete?: (id: string) => void | Promise<void>;
 }
 
-const DjCard = ({ dj, index = 0, isAdmin = false, onDelete }: DjCardProps) => {
+const DjCard = ({ dj, index = 0, isAdmin = false, isBestMatch = false, matchReasons = [], onDelete }: DjCardProps) => {
   const [hovered, setHovered] = useState(false);
   const { venueProfile } = useAuth();
   const [showInvite, setShowInvite] = useState(false);
@@ -67,6 +69,15 @@ const DjCard = ({ dj, index = 0, isAdmin = false, onDelete }: DjCardProps) => {
         </div>
 
         <div className="px-3 py-2.5 space-y-1.5">
+          {(isBestMatch || matchReasons.length > 0) && (
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium">
+              {isBestMatch && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">🔥 Лучшее совпадение</span>}
+              {matchReasons.map((reason) => (
+                <span key={reason} className="rounded-full bg-primary/5 px-2 py-0.5 text-primary/80">{reason}</span>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground truncate">{dj.name}</h3>
             <span className="text-[11px] font-mono text-primary shrink-0 ml-2">{formatPrice(dj.price)}</span>

@@ -37,7 +37,7 @@ import {
   shouldCreateBookingForStatusTransition,
   type BookingStatus,
 } from "@/lib/bookings";
-import { ensureChatThreadForBooking } from "@/hooks/useChat";
+import { ensureChatThreadForBooking, ensureInitialChatMessage } from "@/hooks/useChat";
 import type { ChatThread } from "@/lib/chat";
 import { cachedRequest, getCachedValue, patchCachedListsWhere, setCachedValue } from "@/lib/requestCache";
 
@@ -1176,6 +1176,10 @@ export async function updateApplicationStatus(id: string, status: ApplicationSta
     const thread = await ensureChatThreadForBooking(acceptedBooking.id);
     if (thread.error) return { data: null, error: thread.error, chatThread: null };
     chatThread = thread.data;
+    if (chatThread) {
+      const seeded = await ensureInitialChatMessage(chatThread, "venue");
+      if (seeded.error) console.warn("Initial chat message failed", seeded.error);
+    }
   }
   return { data, error: null, chatThread };
 }
@@ -1427,6 +1431,12 @@ export async function updateInvitationStatus(id: string, status: "new" | "accept
   if (thread.error) {
     await supabase.from("invitations").update({ status: current.status }).eq("id", id);
     return { error: thread.error };
+  }
+  if (thread.data) {
+    const seeded = await ensureInitialChatMessage(thread.data, "dj");
+    if (seeded.error) {
+      console.warn("Initial chat message failed", seeded.error);
+    }
   }
 
   const { error } = await supabase.from("invitations").update({ status }).eq("id", id);

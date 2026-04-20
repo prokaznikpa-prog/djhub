@@ -9,11 +9,13 @@ import CreatePostModal from "@/components/CreatePostModal";
 import { Plus, Filter, SlidersHorizontal, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { setCachedValue } from "@/lib/requestCache";
+import { calculateGigScore, getMatchReasons } from "@/utils/matching";
+import { getCleanDisplayOptions } from "@/lib/displayLabels";
 
 type OpportunityTab = "open" | "closed";
 
 const PostListings = () => {
-  const { venueProfile } = useAuth();
+  const { djProfile, venueProfile } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [search, setSearch] = useState("");
@@ -31,7 +33,7 @@ const PostListings = () => {
     postType: filterType || undefined,
     venueId: tab === "closed" ? venueProfile?.id : undefined,
   });
-  const cities = useMemo(() => [...new Set(rawPosts.map((p) => p.city))].sort((a, b) => getCityLabel(a).localeCompare(getCityLabel(b), "ru")), [rawPosts]);
+  const cities = useMemo(() => getCleanDisplayOptions(rawPosts.map((p) => p.city), getCityLabel), [rawPosts]);
 
   const hasActiveFilters = !!(filterCity || filterStyle || filterType || search);
 
@@ -50,17 +52,29 @@ const PostListings = () => {
   }, [rawPosts, tab, venueProfile?.id]);
 
   const posts = useMemo(() => {
-    if (!deferredSearch) return scopedPosts;
-    const q = deferredSearch.toLowerCase();
-    return scopedPosts.filter((p) =>
-      p.title.toLowerCase().includes(q) ||
-      p.city.toLowerCase().includes(q) ||
-      getCityLabel(p.city).toLowerCase().includes(q) ||
-      p.music_styles.some((s) => s.toLowerCase().includes(q))
-    );
-  }, [scopedPosts, deferredSearch]);
+    let list = scopedPosts;
+    if (deferredSearch) {
+      const q = deferredSearch.toLowerCase();
+      list = scopedPosts.filter((p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.city.toLowerCase().includes(q) ||
+        getCityLabel(p.city).toLowerCase().includes(q) ||
+        p.music_styles.some((s) => s.toLowerCase().includes(q))
+      );
+    }
 
-  const selectCls = "rounded-xl border border-border/40 bg-background/50 px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30";
+    if (!djProfile || tab !== "open") return list;
+
+    return list
+      .map((post) => ({ post, score: calculateGigScore(post, djProfile) }))
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return new Date(b.post.created_at).getTime() - new Date(a.post.created_at).getTime();
+      })
+      .map(({ post }) => post);
+  }, [scopedPosts, deferredSearch, djProfile, tab]);
+
+  const selectCls = "djhub-select";
 
   return (
     <div className="min-h-screen pt-20 pb-12">
@@ -175,7 +189,12 @@ const PostListings = () => {
                     }}
                   />
                 ) : (
-                  <VenuePostCard post={post} index={i} />
+                  <VenuePostCard
+                    post={post}
+                    index={i}
+                    isBestMatch={!!djProfile && tab === "open" && i < 3}
+                    matchReasons={djProfile && tab === "open" ? getMatchReasons(post, djProfile) : []}
+                  />
                 )}
               </div>
             ))}
@@ -289,7 +308,7 @@ const ReopenPostModal = ({ post, onClose, onSaved }: { post: VenuePost; onClose:
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Длительность</label>
-              <select className={fieldCls} value={duration} onChange={(event) => setDuration(event.target.value)}>
+              <select className="djhub-select w-full text-sm" value={duration} onChange={(event) => setDuration(event.target.value)}>
                 <option value="">Выбрать</option>
                 {GIG_DURATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>

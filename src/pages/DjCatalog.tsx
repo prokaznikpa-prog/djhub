@@ -7,6 +7,10 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import type { Tables } from "@/integrations/supabase/types";
 import { cachedRequest, getCachedValue, setCachedValue } from "@/lib/requestCache";
+import { calculateDjScore, getMatchReasons } from "@/utils/matching";
+import { getCleanDisplayOptions } from "@/lib/displayLabels";
+import { getCityLabel } from "@/lib/geography";
+import { getDjExperienceLabel } from "@/lib/djOptions";
 
 const DjCatalog = () => {
   const cacheKey = "catalog:djs:active";
@@ -17,8 +21,8 @@ const DjCatalog = () => {
   const [filterCity, setFilterCity] = useState("");
   const [filterStyle, setFilterStyle] = useState("");
   const [filterExperience, setFilterExperience] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "price">("name");
-  const { isAdmin } = useAuth();
+  const [sortBy, setSortBy] = useState<"match" | "name" | "price">("match");
+  const { isAdmin, venueProfile } = useAuth();
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
@@ -49,12 +53,16 @@ const DjCatalog = () => {
       toast.error("Не удалось скрыть — нет прав администратора");
       return;
     }
-    setAllDjs((prev) => prev.filter((dj) => dj.id !== id));
+    setAllDjs((prev) => {
+      const next = prev.filter((dj) => dj.id !== id);
+      setCachedValue(cacheKey, next);
+      return next;
+    });
     toast.success("DJ скрыт из маркетплейса");
   }, []);
 
-  const cities = useMemo(() => [...new Set(allDjs.map((d) => d.city))].sort(), [allDjs]);
-  const experiences = useMemo(() => [...new Set(allDjs.map((d) => d.experience).filter(Boolean))].sort(), [allDjs]);
+  const cities = useMemo(() => getCleanDisplayOptions(allDjs.map((d) => d.city), getCityLabel), [allDjs]);
+  const experiences = useMemo(() => getCleanDisplayOptions(allDjs.map((d) => d.experience), getDjExperienceLabel), [allDjs]);
 
   const hasActiveFilters = !!(filterCity || filterStyle || filterExperience || search);
 
@@ -78,17 +86,27 @@ const DjCatalog = () => {
     if (filterCity) list = list.filter((d) => d.city === filterCity);
     if (filterStyle) list = list.filter((d) => d.styles.includes(filterStyle));
     if (filterExperience) list = list.filter((d) => d.experience === filterExperience);
-    if (sortBy === "price") {
+    if (sortBy === "match" && venueProfile) {
+      list = list
+        .map((dj) => ({ dj, score: calculateDjScore(dj, venueProfile) }))
+        .sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return new Date(b.dj.created_at).getTime() - new Date(a.dj.created_at).getTime();
+        })
+        .map(({ dj }) => dj);
+    } else if (sortBy === "price") {
       list.sort((a, b) => {
         const numA = parseInt(a.price.replace(/\D/g, "")) || 0;
         const numB = parseInt(b.price.replace(/\D/g, "")) || 0;
         return numA - numB;
       });
+    } else {
+      list.sort((a, b) => a.name.localeCompare(b.name));
     }
     return list;
-  }, [allDjs, deferredSearch, filterCity, filterStyle, filterExperience, sortBy]);
+  }, [allDjs, deferredSearch, filterCity, filterStyle, filterExperience, sortBy, venueProfile]);
 
-  const selectCls = "rounded-xl border border-border/40 bg-background/50 px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30";
+  const selectCls = "djhub-select";
 
   return (
     <div className="min-h-screen pt-20 pb-12">
@@ -128,7 +146,7 @@ const DjCatalog = () => {
             <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
             <select className={selectCls} value={filterCity} onChange={(e) => setFilterCity(e.target.value)}>
               <option value="">Все города</option>
-              {cities.map((c) => <option key={c} value={c}>{c}</option>)}
+              {cities.map((c) => <option key={c} value={c}>{getCityLabel(c)}</option>)}
             </select>
             <select className={selectCls} value={filterStyle} onChange={(e) => setFilterStyle(e.target.value)}>
               <option value="">Все стили</option>
@@ -136,9 +154,10 @@ const DjCatalog = () => {
             </select>
             <select className={selectCls} value={filterExperience} onChange={(e) => setFilterExperience(e.target.value)}>
               <option value="">Любой опыт</option>
-              {experiences.map((e) => <option key={e} value={e!}>{e}</option>)}
+              {experiences.map((e) => <option key={e} value={e}>{getDjExperienceLabel(e)}</option>)}
             </select>
-            <select className={selectCls} value={sortBy} onChange={(e) => setSortBy(e.target.value as "name" | "price")}>
+            <select className={selectCls} value={sortBy} onChange={(e) => setSortBy(e.target.value as "match" | "name" | "price")}>
+              <option value="match">Лучшие совпадения</option>
               <option value="name">По имени</option>
               <option value="price">По цене</option>
             </select>
@@ -155,7 +174,15 @@ const DjCatalog = () => {
         ) : filtered.length > 0 ? (
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {filtered.map((dj, i) => (
-              <DjCard key={dj.id} dj={dj} index={i} isAdmin={isAdmin} onDelete={handleDeleteDj} />
+              <DjCard
+                key={dj.id}
+                dj={dj}
+                index={i}
+                isAdmin={isAdmin}
+                isBestMatch={!!venueProfile && sortBy === "match" && i < 3}
+                matchReasons={venueProfile ? getMatchReasons(dj, venueProfile) : []}
+                onDelete={handleDeleteDj}
+              />
             ))}
           </div>
         ) : (

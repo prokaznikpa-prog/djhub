@@ -7,7 +7,14 @@ import { getCityLabel } from "@/lib/geography";
 import { preloadRoute } from "@/lib/routePreload";
 import { setCachedValue } from "@/lib/requestCache";
 
-const VenuePostCard = ({ post, index = 0 }: { post: VenuePost; index?: number }) => {
+interface VenuePostCardProps {
+  post: VenuePost;
+  index?: number;
+  isBestMatch?: boolean;
+  matchReasons?: string[];
+}
+
+const VenuePostCard = ({ post, index = 0, isBestMatch = false, matchReasons = [] }: VenuePostCardProps) => {
   const isClosed = !isOpenGig(post);
 
   return (
@@ -21,7 +28,16 @@ const VenuePostCard = ({ post, index = 0 }: { post: VenuePost; index?: number })
         setCachedValue(`post:${post.id}`, post);
       }}
     >
-      <div className="px-4 py-3.5 space-y-2.5">
+        <div className="px-4 py-3.5 space-y-2.5">
+        {(isBestMatch || matchReasons.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium">
+            {isBestMatch && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">🔥 Лучшее совпадение</span>}
+            {matchReasons.map((reason) => (
+              <span key={reason} className="rounded-full bg-primary/5 px-2 py-0.5 text-primary/80">{reason}</span>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-foreground truncate">{post.title}</h3>
           <div className="flex items-center gap-1.5">

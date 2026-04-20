@@ -17,6 +17,10 @@ const CHAT_THREADS_TABLE = "chat_threads" as any;
 const CHAT_MESSAGES_TABLE = "chat_messages" as any;
 const THREAD_SELECT = "*, bookings(status, completed_at), venue_posts(title, event_date), dj_profiles(name), venue_profiles(name)";
 const CHAT_CACHE_TTL = 45_000;
+const INITIAL_CHAT_MESSAGE: Record<ChatParticipant["kind"], string> = {
+  dj: "Привет! Готов обсудить детали выступления 👌",
+  venue: "Привет! Давайте обсудим детали мероприятия",
+};
 
 function mergeChatThread(current: ChatThread[], incoming: ChatThread) {
   const withoutDuplicate = current.filter((thread) => (
@@ -463,6 +467,26 @@ export async function sendChatMessage(thread: ChatThread, participant: ChatParti
     data: data ? mapChatMessage(data as ChatMessageRow) : null,
     error,
   };
+}
+
+export async function ensureInitialChatMessage(thread: ChatThread, senderKind: ChatParticipant["kind"]) {
+  const senderId = senderKind === "dj" ? thread.djId : thread.venueId;
+  const participant: ChatParticipant = { profileId: senderId, kind: senderKind };
+
+  if (!isThreadParticipant(thread, participant)) {
+    return { data: null, error: new Error("РќРµС‚ РґРѕСЃС‚СѓРїР° Рє С‡Р°С‚Сѓ") };
+  }
+
+  const existing = await supabase
+    .from(CHAT_MESSAGES_TABLE)
+    .select("id")
+    .eq("thread_id", thread.id)
+    .limit(1);
+
+  if (existing.error) return { data: null, error: existing.error };
+  if ((existing.data?.length ?? 0) > 0) return { data: null, error: null };
+
+  return sendChatMessage(thread, participant, INITIAL_CHAT_MESSAGE[senderKind]);
 }
 
 export async function hideChatThreadForParticipant(thread: ChatThread, participant: ChatParticipant) {

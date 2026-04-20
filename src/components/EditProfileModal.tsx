@@ -100,6 +100,7 @@ const EditProfileModal = ({
 
   const inputCls =
     "w-full rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30";
+  const selectCls = "djhub-select w-full text-sm";
   const labelCls = "block mb-1 text-xs font-medium text-foreground";
 
   const currentStyleCount = useMemo(
@@ -307,7 +308,7 @@ const EditProfileModal = ({
                 <div>
                   <label className={labelCls}>Город</label>
                   <select
-                    className={inputCls}
+                    className={selectCls}
                     value={djCity}
                     onChange={(e) => setDjCity(e.target.value)}
                   >
@@ -391,7 +392,7 @@ const EditProfileModal = ({
                 <div>
                   <label className={labelCls}>Опыт</label>
                   <select
-                    className={inputCls}
+                    className={selectCls}
                     value={djExperience}
                     onChange={(e) => setDjExperience(e.target.value)}
                   >
@@ -406,7 +407,7 @@ const EditProfileModal = ({
                 <div>
                   <label className={labelCls}>Доступность</label>
                   <select
-                    className={inputCls}
+                    className={selectCls}
                     value={djAvailability}
                     onChange={(e) => setDjAvailability(e.target.value)}
                   >
@@ -512,7 +513,7 @@ const EditProfileModal = ({
                 <div>
                   <label className={labelCls}>Город</label>
                   <select
-                    className={inputCls}
+                    className={selectCls}
                     value={vCity}
                     onChange={(e) => setVCity(e.target.value)}
                   >
@@ -528,7 +529,7 @@ const EditProfileModal = ({
                 <div>
                   <label className={labelCls}>Тип</label>
                   <select
-                    className={inputCls}
+                    className={selectCls}
                     value={vType}
                     onChange={(e) => setVType(e.target.value)}
                   >
@@ -582,7 +583,7 @@ const EditProfileModal = ({
                 <div>
                   <label className={labelCls}>Оборудование</label>
                   <select
-                    className={inputCls}
+                    className={selectCls}
                     value={vEquipment}
                     onChange={(e) => setVEquipment(e.target.value)}
                   >
@@ -597,7 +598,7 @@ const EditProfileModal = ({
                 <div>
                   <label className={labelCls}>Условия</label>
                   <select
-                    className={inputCls}
+                    className={selectCls}
                     value={vConditions}
                     onChange={(e) => setVConditions(e.target.value)}
                   >

@@ -1,11 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams, Navigate, Link } from "react-router-dom";
-import { MUSIC_STYLES, djs, venues } from "@/data/djhub-data";
-import { registerDj, registerVenue } from "@/data/store";
-import type { DJ, Venue } from "@/data/djhub-data";
+import { MUSIC_STYLES } from "@/data/djhub-data";
 import { toast } from "sonner";
 import { MapPin, Upload, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { CITY_OPTIONS, getCityLabel } from "@/lib/geography";
 import {
@@ -22,11 +21,13 @@ import {
 const TEXT_LIMIT = 200;
 const digitsOnly = (value: string) => value.replace(/\D/g, "");
 
-const PreviewDjCard = ({ dj }: { dj: (typeof djs)[0] }) => (
+const PreviewDjCard = ({ dj }: { dj: Tables<"dj_profiles"> }) => (
   <div className="overflow-hidden rounded-md border border-border bg-card opacity-80">
-    <div className="aspect-[2/1] overflow-hidden">
-      <img src={dj.image} alt={dj.name} className="h-full w-full object-cover" />
-    </div>
+    {dj.image_url && (
+      <div className="aspect-[2/1] overflow-hidden">
+        <img src={dj.image_url} alt={dj.name} className="h-full w-full object-cover" />
+      </div>
+    )}
     <div className="space-y-1 px-2.5 py-2">
       <div className="flex items-center justify-between">
         <h3 className="truncate text-xs font-semibold text-foreground">{dj.name}</h3>
@@ -40,11 +41,13 @@ const PreviewDjCard = ({ dj }: { dj: (typeof djs)[0] }) => (
   </div>
 );
 
-const PreviewVenueCard = ({ venue }: { venue: (typeof venues)[0] }) => (
+const PreviewVenueCard = ({ venue }: { venue: Tables<"venue_profiles"> }) => (
   <div className="overflow-hidden rounded-md border border-border bg-card opacity-80">
-    <div className="aspect-[2/1] overflow-hidden">
-      <img src={venue.image} alt={venue.name} className="h-full w-full object-cover" />
-    </div>
+    {venue.image_url && (
+      <div className="aspect-[2/1] overflow-hidden">
+        <img src={venue.image_url} alt={venue.name} className="h-full w-full object-cover" />
+      </div>
+    )}
     <div className="space-y-1 px-2.5 py-2">
       <div className="flex items-center justify-between">
         <h3 className="truncate text-xs font-semibold text-foreground">{venue.name}</h3>
@@ -101,6 +104,39 @@ const Register = () => {
   const [venueAddress, setVenueAddress] = useState("");
   const [venueConditions, setVenueConditions] = useState("");
   const [venuePhotoPreview, setVenuePhotoPreview] = useState<string | null>(null);
+  const [previewDjs, setPreviewDjs] = useState<Tables<"dj_profiles">[]>([]);
+  const [previewVenues, setPreviewVenues] = useState<Tables<"venue_profiles">[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPreviews = async () => {
+      const [djRes, venueRes] = await Promise.all([
+        supabase
+          .from("dj_profiles")
+          .select("*")
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(4),
+        supabase
+          .from("venue_profiles")
+          .select("*")
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(4),
+      ]);
+
+      if (!isMounted) return;
+      setPreviewDjs(djRes.data ?? []);
+      setPreviewVenues(venueRes.data ?? []);
+    };
+
+    void loadPreviews();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   if (!authLoading && !user) {
     return <Navigate to="/signup" replace />;
@@ -182,33 +218,7 @@ const Register = () => {
           .select()
           .single();
 
-        const id = supaRow?.id || `dj-${Date.now()}`;
-        if (supaErr) console.warn("Supabase DJ insert warning:", supaErr.message);
-
-        const profile: DJ = {
-          id,
-          name: djName.trim(),
-          city: djCity,
-          contact: djContact.trim(),
-          styles: djStyles,
-          priorityStyle: djStyles[0] || "",
-          price: djPrice.trim(),
-          bio: djBio.trim(),
-          experience: djExperience,
-          playedAt: djPlayedAt.split(",").map((s) => s.trim()).filter(Boolean),
-          availability: djAvailability,
-          format: "",
-          openToCollab: djCollab,
-          openToCrew: djCrew,
-          socials: [
-            ...(djSoundcloud.trim() ? [{ label: "SoundCloud", url: djSoundcloud.trim() }] : []),
-            ...(djInstagram.trim() ? [{ label: "Instagram", url: djInstagram.trim() }] : []),
-          ],
-          image: djPhotoPreview || "/placeholder.svg",
-        };
-
-        registerDj(profile);
-        localStorage.setItem("djhub_dj_profile", JSON.stringify(profile));
+        if (supaErr || !supaRow) throw supaErr ?? new Error("DJ profile was not created");
         await refreshProfiles();
         toast.success("Профиль DJ создан!");
         navigate("/djs");
@@ -231,25 +241,7 @@ const Register = () => {
           .select()
           .single();
 
-        const id = supaRow?.id || `venue-${Date.now()}`;
-        if (supaErr) console.warn("Supabase venue insert warning:", supaErr.message);
-
-        const profile: Venue = {
-          id,
-          name: venueName.trim(),
-          city: venueCity,
-          type: venueType,
-          contact: venueContact.trim(),
-          music: venueStyles,
-          description: venueDesc.trim(),
-          equipment: venueEquipment,
-          address: venueAddress.trim() || undefined,
-          foodDrinks: venueConditions,
-          image: venuePhotoPreview || "/placeholder.svg",
-        };
-
-        registerVenue(profile);
-        localStorage.setItem("djhub_venue_profile", JSON.stringify(profile));
+        if (supaErr || !supaRow) throw supaErr ?? new Error("Venue profile was not created");
         await refreshProfiles();
         toast.success("Профиль заведения создан!");
         navigate("/djs");
@@ -271,6 +263,7 @@ const Register = () => {
 
   const inputCls =
     "input-glow w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow duration-150";
+  const selectCls = "djhub-select w-full text-sm";
   const labelCls = "mb-1 block text-xs font-medium text-foreground";
   const requiredMark = <span className="ml-0.5 text-destructive">*</span>;
 
@@ -344,10 +337,11 @@ const Register = () => {
                         Город{requiredMark}
                       </label>
                       <select
-                        className={inputCls}
+                        className={selectCls}
                         value={djCity}
                         onChange={(e) => setDjCity(e.target.value)}
                       >
+                        <option value="">Выбрать</option>
                         {CITY_OPTIONS.map((city) => (
                           <option key={city.value} value={city.value}>
                             {city.label}
@@ -434,7 +428,7 @@ const Register = () => {
                         <div>
                           <label className={labelCls}>Опыт</label>
                           <select
-                            className={inputCls}
+                            className={selectCls}
                             value={djExperience}
                             onChange={(e) => setDjExperience(e.target.value)}
                           >
@@ -449,7 +443,7 @@ const Register = () => {
                         <div>
                           <label className={labelCls}>Доступность</label>
                           <select
-                            className={inputCls}
+                            className={selectCls}
                             value={djAvailability}
                             onChange={(e) => setDjAvailability(e.target.value)}
                           >
@@ -565,10 +559,11 @@ const Register = () => {
                         Город{requiredMark}
                       </label>
                       <select
-                        className={inputCls}
+                        className={selectCls}
                         value={venueCity}
                         onChange={(e) => setVenueCity(e.target.value)}
                       >
+                        <option value="">Выбрать</option>
                         {CITY_OPTIONS.map((city) => (
                           <option key={city.value} value={city.value}>
                             {city.label}
@@ -583,7 +578,7 @@ const Register = () => {
                         Тип{requiredMark}
                       </label>
                       <select
-                        className={inputCls}
+                        className={selectCls}
                         value={venueType}
                         onChange={(e) => setVenueType(e.target.value)}
                       >
@@ -668,7 +663,7 @@ const Register = () => {
                         <div>
                           <label className={labelCls}>Оборудование</label>
                           <select
-                            className={inputCls}
+                            className={selectCls}
                             value={venueEquipment}
                             onChange={(e) => setVenueEquipment(e.target.value)}
                           >
@@ -683,7 +678,7 @@ const Register = () => {
                         <div>
                           <label className={labelCls}>Условия</label>
                           <select
-                            className={inputCls}
+                            className={selectCls}
                             value={venueConditions}
                             onChange={(e) => setVenueConditions(e.target.value)}
                           >
@@ -718,11 +713,15 @@ const Register = () => {
             Уже на <span className="text-primary">DJHUB</span>
           </h2>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {role === "dj"
-              ? djs.map((d) => <PreviewDjCard key={d.id} dj={d} />)
-              : venues.map((v) => <PreviewVenueCard key={v.id} venue={v} />)}
-          </div>
+          {(role === "dj" ? previewDjs.length : previewVenues.length) > 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {role === "dj"
+                ? previewDjs.map((d) => <PreviewDjCard key={d.id} dj={d} />)
+                : previewVenues.map((v) => <PreviewVenueCard key={v.id} venue={v} />)}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">РђРєС‚РёРІРЅС‹Рµ РїСЂРѕС„РёР»Рё СЃРєРѕСЂРѕ РїРѕСЏРІСЏС‚СЃСЏ</p>
+          )}
 
           <button
             onClick={scrollToForm}

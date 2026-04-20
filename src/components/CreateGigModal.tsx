@@ -4,6 +4,7 @@ import type { Gig } from "@/data/djhub-data";
 import { addGig, getCurrentVenueProfile } from "@/data/store";
 import { X } from "lucide-react";
 import { toast } from "sonner";
+import { CITY_OPTIONS } from "@/lib/geography";
 
 interface Props {
   onClose: () => void;
@@ -21,6 +22,7 @@ const CreateGigModal = ({ onClose, onCreated }: Props) => {
   const [format, setFormat] = useState("");
 
   const inputCls = "w-full rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-shadow";
+  const selectCls = "djhub-select w-full text-sm";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +60,12 @@ const CreateGigModal = ({ onClose, onCreated }: Props) => {
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="block text-xs font-medium mb-1 text-foreground">Город <span className="text-destructive">*</span></label>
-            <input className={inputCls} value={city} onChange={(e) => setCity(e.target.value)} placeholder="Санкт-Петербург" />
+            <select className={selectCls} value={city} onChange={(e) => setCity(e.target.value)}>
+              <option value="">Выбрать</option>
+              {CITY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

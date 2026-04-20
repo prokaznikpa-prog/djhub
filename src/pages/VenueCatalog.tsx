@@ -40,7 +40,11 @@ const VenueCatalog = () => {
       toast.error("Не удалось скрыть — нет прав администратора");
       return;
     }
-    setVenues((prev) => prev.filter((venue) => venue.id !== id));
+    setVenues((prev) => {
+      const next = prev.filter((venue) => venue.id !== id);
+      setCachedValue(cacheKey, next);
+      return next;
+    });
     toast.success("Заведение скрыто из маркетплейса");
   }, []);
 

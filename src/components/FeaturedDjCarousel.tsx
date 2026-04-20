@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { DJ } from "@/data/djhub-data";
 import { Link } from "react-router-dom";
 import { MapPin, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { getCityLabel } from "@/lib/geography";
 
 interface Props {
   djs: DJ[];
@@ -145,7 +146,7 @@ const CarouselCard = ({ dj, isCenter }: { dj: DJ; isCenter: boolean }) => (
       </div>
       <div className="flex items-center gap-1 text-xs text-muted-foreground">
         <MapPin className="h-3 w-3 opacity-60" />
-        <span className="truncate">{dj.city}</span>
+        <span className="truncate">{getCityLabel(dj.city)}</span>
       </div>
       <div className="flex gap-1.5 flex-wrap">
         {dj.styles.slice(0, 3).map((s) => (

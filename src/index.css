@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,24 +7,24 @@
 @layer base {
   :root {
     --background: 220 20% 6%;
-    --foreground: 0 0% 93%;
+    --foreground: 20 14% 88%;
 
     --card: 220 18% 10%;
-    --card-foreground: 0 0% 93%;
+    --card-foreground: 20 14% 88%;
 
     --popover: 220 18% 10%;
-    --popover-foreground: 0 0% 93%;
+    --popover-foreground: 20 14% 88%;
 
-    --primary: 142 71% 45%;
+    --primary: 0 84% 58%;
     --primary-foreground: 220 20% 6%;
 
     --secondary: 220 15% 15%;
-    --secondary-foreground: 0 0% 85%;
+    --secondary-foreground: 20 10% 80%;
 
     --muted: 220 15% 13%;
-    --muted-foreground: 220 10% 50%;
+    --muted-foreground: 20 8% 60%;
 
-    --accent: 142 71% 45%;
+    --accent: 0 84% 58%;
     --accent-foreground: 220 20% 6%;
 
     --destructive: 0 84% 60%;
@@ -32,21 +32,21 @@
 
     --border: 220 15% 18%;
     --input: 220 15% 18%;
-    --ring: 142 71% 45%;
+    --ring: 0 84% 58%;
 
     --radius: 1rem;
 
     --sidebar-background: 220 18% 8%;
-    --sidebar-foreground: 0 0% 93%;
-    --sidebar-primary: 142 71% 45%;
+    --sidebar-foreground: 20 14% 88%;
+    --sidebar-primary: 0 84% 58%;
     --sidebar-primary-foreground: 220 20% 6%;
     --sidebar-accent: 220 15% 15%;
-    --sidebar-accent-foreground: 0 0% 93%;
+    --sidebar-accent-foreground: 20 14% 88%;
     --sidebar-border: 220 15% 18%;
-    --sidebar-ring: 142 71% 45%;
+    --sidebar-ring: 0 84% 58%;
 
-    --neon-glow: 0 0 20px hsl(142 71% 45% / 0.3);
-    --neon-glow-strong: 0 0 30px hsl(142 71% 45% / 0.5);
+    --neon-glow: 0 0 20px hsl(0 84% 58% / 0.3);
+    --neon-glow-strong: 0 0 30px hsl(0 84% 58% / 0.5);
   }
 }
 
@@ -54,19 +54,31 @@
   * {
     @apply border-border;
   }
+
   html {
     scroll-behavior: smooth;
   }
+
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground;
+    font-family: 'Sora', sans-serif;
+
     background-image: url('@/assets/bg-main.jpg');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
     background-repeat: no-repeat;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
   body::before {
     content: '';
     position: fixed;
@@ -75,6 +87,7 @@
     z-index: 0;
     pointer-events: none;
   }
+
   #root {
     position: relative;
     z-index: 1;
@@ -82,81 +95,115 @@
 }
 
 @layer utilities {
-  .neon-text {
-    text-shadow: 0 0 10px hsl(142 71% 45% / 0.5), 0 0 20px hsl(142 71% 45% / 0.3);
-  }
-  .neon-border {
-    box-shadow: 0 0 10px hsl(142 71% 45% / 0.2), inset 0 0 10px hsl(142 71% 45% / 0.05);
+
+  /* 🔥 НОВОЕ — стиль заголовков */
+  .section-title {
+    color: hsl(20 12% 75%);
+    letter-spacing: 0.02em;
+    font-weight: 500;
   }
 
-  /* Card hover — shadow only, no transform to avoid page shake */
+  .neon-text {
+    text-shadow: 0 0 10px hsl(0 84% 58% / 0.5), 0 0 20px hsl(0 84% 58% / 0.3);
+  }
+
   .card-hover {
     @apply transition-[box-shadow,border-color] duration-200 ease-out;
   }
+
   .card-hover:hover {
-    box-shadow: 0 0 20px hsl(142 71% 45% / 0.12), 0 4px 12px hsl(0 0% 0% / 0.3);
+    box-shadow: 0 0 20px hsl(0 84% 58% / 0.12),
+                0 4px 12px hsl(0 0% 0% / 0.3);
   }
 
-  /* Image zoom on card hover */
   .card-hover .card-img {
     @apply transition-transform duration-300 ease-out;
   }
+
   .card-hover:hover .card-img {
     transform: scale(1.05);
   }
 
-  /* Button hover */
   .btn-glow {
     @apply transition-all duration-150 ease-out;
   }
+
   .btn-glow:hover {
-    box-shadow: 0 0 14px hsl(142 71% 45% / 0.25);
+    box-shadow: 0 0 14px hsl(0 84% 58% / 0.25);
     transform: translateY(-1px);
   }
+
   .btn-glow:active {
     transform: translateY(0) scale(0.98);
   }
 
-  /* Style pill hover */
   .pill-glow {
     @apply transition-all duration-150;
   }
+
   .pill-glow:hover {
-    box-shadow: 0 0 8px hsl(142 71% 45% / 0.3);
+    box-shadow: 0 0 8px hsl(0 84% 58% / 0.3);
   }
 
-  /* Input focus glow */
   .input-glow:focus {
-    box-shadow: 0 0 0 2px hsl(142 71% 45% / 0.25), 0 0 12px hsl(142 71% 45% / 0.1);
+    box-shadow: 0 0 0 2px hsl(0 84% 58% / 0.25),
+                0 0 12px hsl(0 84% 58% / 0.1);
   }
 
-  /* Glass effect */
+  .djhub-select {
+    @apply h-9 appearance-none rounded-lg border border-border/60 bg-background/80 px-3 pr-9 text-xs font-medium text-foreground shadow-sm transition-colors focus:border-primary/70 focus:outline-none focus:ring-2 focus:ring-primary/20;
+    color-scheme: dark;
+    background-image: linear-gradient(45deg, transparent 50%, hsl(var(--muted-foreground)) 50%),
+      linear-gradient(135deg, hsl(var(--muted-foreground)) 50%, transparent 50%);
+    background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+    background-repeat: no-repeat;
+    background-size: 5px 5px, 5px 5px;
+  }
+
+  .djhub-select:hover {
+    @apply border-border bg-background;
+  }
+
+  .djhub-select:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .djhub-select option {
+    background-color: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+  }
+
+  .djhub-select option:checked {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+
   .glass {
     background: hsl(220 18% 10% / 0.7);
     backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
   }
 
-  /* Nav link hover */
   .nav-link {
     @apply relative transition-all duration-150;
   }
+
   .nav-link::after {
     content: '';
     @apply absolute bottom-0 left-1/2 w-0 h-px bg-primary transition-all duration-200;
     transform: translateX(-50%);
   }
+
   .nav-link:hover::after,
   .nav-link.active::after {
     @apply w-full;
   }
 
-  /* Scroll reveal */
   .scroll-reveal {
     opacity: 0;
     transform: translateY(16px);
     transition: opacity 0.4s ease-out, transform 0.4s ease-out;
   }
+
   .scroll-reveal.visible {
     opacity: 1;
     transform: translateY(0);

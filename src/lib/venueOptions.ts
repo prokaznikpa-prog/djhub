@@ -1,5 +1,7 @@
+import { getCleanDisplayLabel } from "@/lib/displayLabels";
+
 export const VENUE_TYPE_OPTIONS = [
-    { value: "", label: "Выбрать" },
+  { value: "", label: "Выбрать" },
   { value: "bar", label: "Бар" },
   { value: "club", label: "Клуб" },
   { value: "restaurant", label: "Ресторан" },
@@ -10,7 +12,7 @@ export const VENUE_TYPE_OPTIONS = [
 ] as const;
 
 export const VENUE_EQUIPMENT_OPTIONS = [
-    { value: "", label: "Выбрать" },
+  { value: "", label: "Выбрать" },
   { value: "cdj-2000nxs2", label: "CDJ-2000NXS2" },
   { value: "cdj-3000", label: "CDJ-3000" },
   { value: "xdj-1000mk2", label: "XDJ-1000MK2" },
@@ -18,11 +20,11 @@ export const VENUE_EQUIPMENT_OPTIONS = [
   { value: "controller", label: "Контроллер" },
   { value: "cdj-900", label: "CDJ-900" },
   { value: "cdj-900nexus", label: "CDJ-900 Nexus" },
-  { value: "other", label: "другое" },
+  { value: "other", label: "Другое" },
 ] as const;
 
 export const VENUE_CONDITIONS_OPTIONS = [
-    { value: "", label: "Выбрать" },
+  { value: "", label: "Выбрать" },
   { value: "drinks-food", label: "Напитки и еда" },
   { value: "rider", label: "Райдер" },
   { value: "drinks", label: "Напитки" },
@@ -43,5 +45,5 @@ export function getVenueOptionLabel(
   options: readonly { value: string; label: string }[]
 ): string {
   if (!value) return "";
-  return options.find((item) => item.value === value)?.label ?? value;
+  return options.find((item) => item.value === value)?.label ?? getCleanDisplayLabel(value);
 }

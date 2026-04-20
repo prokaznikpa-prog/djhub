@@ -1,4 +1,3 @@
-import { djs as seedDjs, venues as seedVenues, gigs as seedGigs } from "@/data/djhub-data";
 import type { DJ, Venue, Gig } from "@/data/djhub-data";
 import { supabase } from "@/integrations/supabase/client";
 import { mapDjToDb, mapDjToLocalStorage, type DjProfileModel } from "@/lib/djProfile";
@@ -95,9 +94,9 @@ export function updateGig(id: string, updates: Partial<Gig>): void {
 
 // --- Merged getters ---
 
-export function getAllDjs(): DJ[] { return [...seedDjs, ...getRegisteredDjs()]; }
-export function getAllVenues(): Venue[] { return [...seedVenues, ...getRegisteredVenues()]; }
-export function getAllGigs(): Gig[] { return [...seedGigs, ...getRegisteredGigs()]; }
+export function getAllDjs(): DJ[] { return getRegisteredDjs(); }
+export function getAllVenues(): Venue[] { return getRegisteredVenues(); }
+export function getAllGigs(): Gig[] { return getRegisteredGigs(); }
 
 export function getDjById(id: string): DJ | undefined { return getAllDjs().find((d) => d.id === id); }
 export function getVenueById(id: string): Venue | undefined { return getAllVenues().find((v) => v.id === id); }
