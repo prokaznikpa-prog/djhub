@@ -87,7 +87,7 @@ const PostListings = () => {
             <button
               onClick={() => setShowFilters((v) => !v)}
               className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors ${
-                showFilters ? "border-primary/40 bg-primary/10 text-primary" : "border-border/40 bg-card/50 text-muted-foreground hover:text-foreground"
+                showFilters ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 bg-white/5 text-muted-foreground hover:border-primary/30 hover:text-foreground"
               }`}
             >
               <Filter className="h-3 w-3" /> Фильтры
@@ -103,7 +103,7 @@ const PostListings = () => {
           </div>
         </div>
 
-        <div className="mb-4 inline-flex rounded-xl border border-border bg-card p-1">
+        <div className="premium-surface mb-4 inline-flex p-1">
           {(["open", "closed"] as const).map((value) => (
             <button
               key={value}
@@ -127,7 +127,7 @@ const PostListings = () => {
             placeholder="Поиск по названию, городу или стилю..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-border/40 bg-background/50 pl-9 pr-9 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="premium-input pl-9 pr-9 py-2"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -137,7 +137,7 @@ const PostListings = () => {
         </div>
 
         {showFilters && (
-          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-border/30 bg-card/40 backdrop-blur-sm px-4 py-3">
+          <div className="premium-surface mb-5 flex flex-wrap items-center gap-2 px-4 py-3">
             <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
             <select className={selectCls} value={filterCity} onChange={(e) => setFilterCity(e.target.value)}>
               <option value="">Все города</option>
@@ -225,12 +225,12 @@ const PostListings = () => {
 };
 
 const ClosedPostCard = ({ post, onReopen, onDelete }: { post: VenuePost; onReopen: () => void; onDelete: () => void }) => (
-  <div className="rounded-2xl border border-border bg-card p-4">
+  <div className="premium-surface p-4">
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-foreground">{post.title}</p>
         <p className="mt-1 text-xs text-muted-foreground">{post.budget || "Бюджет не указан"} · {post.event_date || "Дата не указана"} · {post.start_time || "Время не указано"}</p>
-        <span className="mt-2 inline-block rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{GIG_STATUS_LABEL.closed}</span>
+        <span className="mt-2 inline-block rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-muted-foreground">{GIG_STATUS_LABEL.closed}</span>
       </div>
       <div className="flex shrink-0 gap-2">
         <button onClick={onReopen} className="rounded-lg bg-primary px-3 py-1.5 text-[10px] font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
@@ -251,7 +251,7 @@ const ReopenPostModal = ({ post, onClose, onSaved }: { post: VenuePost; onClose:
   const [duration, setDuration] = useState(post.duration ?? "");
   const [saving, setSaving] = useState(false);
   const canSubmit = budget.trim() && eventDate && startTime && duration;
-  const fieldCls = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30";
+  const fieldCls = "premium-input";
 
   const handleSubmit = async () => {
     if (!canSubmit) {
@@ -281,14 +281,14 @@ const ReopenPostModal = ({ post, onClose, onSaved }: { post: VenuePost; onClose:
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/75 px-4 backdrop-blur-md">
+      <div className="profile-section w-full max-w-md premium-surface p-5" onClick={(event) => event.stopPropagation()}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-foreground">Открыть публикацию</h2>
             <p className="text-xs text-muted-foreground">Обновите условия перед повторной публикацией</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <button onClick={onClose} className="rounded-lg border border-white/10 bg-background/45 p-1.5 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -314,7 +314,7 @@ const ReopenPostModal = ({ post, onClose, onSaved }: { post: VenuePost; onClose:
               </select>
             </div>
           </div>
-          <button onClick={handleSubmit} disabled={saving || !canSubmit} className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50">
+          <button onClick={handleSubmit} disabled={saving || !canSubmit} className="btn-glow w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50">
             {saving ? "Открываем..." : "Открыть публикацию"}
           </button>
         </div>

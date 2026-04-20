@@ -10,6 +10,7 @@ import { getCityLabel } from "@/lib/geography";
 import { getDjAvailabilityLabel } from "@/lib/djOptions";
 import { getDjExperienceLabel } from "@/lib/djOptions";
 import { getCachedValue, setCachedValue } from "@/lib/requestCache";
+import { getDjImage } from "@/lib/image-fallback";
 const DjProfile = () => {
   const { id } = useParams();
   const { venueProfile } = useAuth();
@@ -53,97 +54,124 @@ const DjProfile = () => {
     );
   }
 
+  const heroImage = getDjImage(dj.name, dj.image_url);
+
   return (
-    <div className="min-h-screen pt-20 pb-12">
-      <div className="container mx-auto max-w-2xl px-4">
-        <Link to="/djs" className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Назад
-        </Link>
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          {dj.image_url && (
-            <div className="aspect-[16/9] overflow-hidden">
-              <img src={dj.image_url} alt={dj.name} className="h-full w-full object-cover" />
-            </div>
-          )}
-          <div className="p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-bold text-foreground">{dj.name}</h1>
-              <div className="flex items-center gap-2">
-                {venueProfile && (
-                  <button onClick={() => setShowInvite(true)} className="flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors">
-                    <UserPlus className="h-3.5 w-3.5" /> Пригласить
-                  </button>
-                )}
-                <span className="font-mono text-lg text-primary">{dj.price}</span>
+    <div className="min-h-screen pb-12">
+      <section className="relative min-h-[520px] overflow-hidden pt-20">
+        <img src={heroImage} alt={dj.name} className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/65 to-background/15" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/85 via-background/30 to-transparent" />
+
+        <div className="container relative z-10 mx-auto flex min-h-[500px] max-w-6xl flex-col justify-end px-4 pb-10">
+          <Link to="/djs" className="mb-auto inline-flex w-fit items-center gap-1.5 rounded-lg border border-white/10 bg-background/45 px-3 py-1.5 text-sm text-foreground/80 backdrop-blur-md transition-colors hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" /> Назад
+          </Link>
+
+          <div className="profile-section max-w-3xl space-y-5">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-foreground/80">
+                <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-primary" />{getCityLabel(dj.city)}</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Star className={`h-4 w-4 ${reviewData.count > 0 ? "fill-primary text-primary" : "text-foreground/45"}`} />
+                  {reviewData.count > 0 ? `${reviewData.averageRating.toFixed(1)} · ${reviewData.count} отзывов` : "Рейтинг появится скоро"}
+                </span>
               </div>
-            </div>
-           <div className="flex items-center gap-2 text-muted-foreground">
-  <MapPin className="h-4 w-4" />
-  <span>{getCityLabel(dj.city)}</span>
-</div>
-            <div className="flex flex-wrap gap-2">
-              {dj.styles.map((s) => (
-                <span key={s} className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">{s}</span>
-              ))}
-            </div>
-            {dj.bio && <p className="text-secondary-foreground">{dj.bio}</p>}
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border text-sm">
-              {dj.experience && <div className="flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4" /><span>Опыт: {getDjExperienceLabel(dj.experience)}</span></div>}
-              {dj.availability && <div className="flex items-center gap-2 text-muted-foreground"><Briefcase className="h-4 w-4" /><span>{getDjAvailabilityLabel(dj.availability)}</span></div>}
-              <div className="flex items-center gap-2 text-muted-foreground"><Handshake className="h-4 w-4" /><span>Коллаборации: {dj.open_to_collab ? "Да" : "Нет"}</span></div>
-              <div className="flex items-center gap-2 text-muted-foreground"><Users className="h-4 w-4" /><span>Участие в crew: {dj.open_to_crew ? "Да" : "Нет"}</span></div>
-            </div>
-            {dj.format && <div className="pt-2 border-t border-border text-sm text-muted-foreground">Формат: {dj.format}</div>}
-            {dj.played_at && dj.played_at.length > 0 && (
-              <div className="pt-2 border-t border-border">
-                <p className="text-sm text-muted-foreground mb-1">Играл в:</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {dj.played_at.map((place) => (
-                    <span key={place} className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">{place}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {(dj.soundcloud || dj.instagram) && (
-              <div className="space-y-2 pt-2 border-t border-border">
-                {dj.soundcloud && <a href={dj.soundcloud} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline"><ExternalLink className="h-3.5 w-3.5" /> SoundCloud</a>}
-                {dj.instagram && <a href={dj.instagram} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline"><ExternalLink className="h-3.5 w-3.5" /> Instagram</a>}
-              </div>
-            )}
-            <div className="pt-3 border-t border-border">
-              <div className="flex items-center gap-2 mb-1">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <Star key={i} className={`h-4 w-4 ${i <= Math.round(reviewData.averageRating) ? "fill-primary text-primary" : "text-border"}`} />
+              <h1 className="text-4xl font-bold leading-tight text-foreground drop-shadow sm:text-6xl">{dj.name}</h1>
+              <div className="flex flex-wrap gap-2">
+                {dj.styles.map((s) => (
+                  <span key={s} className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold text-foreground/85 backdrop-blur-md">{s}</span>
                 ))}
-                {reviewData.count > 0 && <span className="text-xs font-semibold text-foreground">{reviewData.averageRating.toFixed(1)}</span>}
               </div>
-              <p className="text-[11px] text-muted-foreground/60">
-                {reviewData.count > 0 ? `${reviewData.count} отзывов` : "Рейтинг появится после первых выступлений"}
-              </p>
-              {reviewData.count > 0 && (
-                <div className={showReviews ? "mt-2 max-h-48 space-y-2 overflow-y-auto pr-1" : "mt-2 space-y-2"}>
-                  {(showReviews ? reviewData.reviews : reviewData.reviews.slice(0, 1)).map((review) => (
-                    <div key={review.id} className="rounded-lg border border-border/60 bg-background/40 px-3 py-2">
-                      <p className="text-[11px] font-semibold text-primary">{review.rating}/5</p>
-                      {review.comment && <p className="mt-1 text-xs text-secondary-foreground">{review.comment}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {reviewData.count > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setShowReviews((value) => !value)}
-                  className="mt-2 text-[11px] font-semibold text-primary hover:underline"
-                >
-                  {showReviews ? "Скрыть отзывы" : "Показать отзывы"}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-primary/30 bg-primary/15 px-4 py-2 text-sm font-bold text-primary backdrop-blur-md">{dj.price}</span>
+              {venueProfile && (
+                <button onClick={() => setShowInvite(true)} className="inline-flex items-center gap-2 rounded-lg border border-primary/35 bg-background/50 px-5 py-2.5 text-sm font-semibold text-primary backdrop-blur-md transition-colors hover:bg-primary/10">
+                  <UserPlus className="h-4 w-4" /> Пригласить
                 </button>
               )}
             </div>
-            <a href={dj.contact} target="_blank" rel="noopener noreferrer" className="mt-4 block w-full rounded-xl bg-primary py-2.5 text-center text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
-              Связаться
-            </a>
           </div>
+        </div>
+      </section>
+
+      <div className="container mx-auto max-w-6xl px-4 pt-8">
+        <div className="grid gap-5 lg:grid-cols-[1.35fr_0.9fr]">
+          <section className="premium-surface profile-section p-6">
+            <p className="text-xs font-semibold uppercase text-primary">Описание</p>
+            <h2 className="mt-2 text-2xl font-bold text-foreground">О DJ</h2>
+            <p className="mt-3 text-sm leading-relaxed text-secondary-foreground">{dj.bio || "DJ пока не добавил описание."}</p>
+          </section>
+
+          <section className="premium-surface profile-section p-6 [animation-delay:80ms]">
+            <p className="text-xs font-semibold uppercase text-primary">Рейтинг</p>
+            <div className="mt-3 flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Star key={i} className={`h-5 w-5 ${i <= Math.round(reviewData.averageRating) ? "fill-primary text-primary" : "text-border"}`} />
+              ))}
+              {reviewData.count > 0 && <span className="text-sm font-semibold text-foreground">{reviewData.averageRating.toFixed(1)}</span>}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">{reviewData.count > 0 ? `${reviewData.count} отзывов` : "Рейтинг появится после первых выступлений"}</p>
+          </section>
+
+          <section className="premium-surface profile-section p-6 [animation-delay:120ms]">
+            <p className="text-xs font-semibold uppercase text-primary">Опыт и доступность</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {dj.experience && <div className="premium-row p-4"><Clock className="mb-2 h-4 w-4 text-primary" /><p className="text-xs text-muted-foreground">Опыт</p><p className="text-sm font-semibold text-foreground">{getDjExperienceLabel(dj.experience)}</p></div>}
+              {dj.availability && <div className="premium-row p-4"><Briefcase className="mb-2 h-4 w-4 text-primary" /><p className="text-xs text-muted-foreground">Доступность</p><p className="text-sm font-semibold text-foreground">{getDjAvailabilityLabel(dj.availability)}</p></div>}
+              <div className="premium-row p-4"><Handshake className="mb-2 h-4 w-4 text-primary" /><p className="text-xs text-muted-foreground">Коллаборации</p><p className="text-sm font-semibold text-foreground">{dj.open_to_collab ? "Да" : "Нет"}</p></div>
+              <div className="premium-row p-4"><Users className="mb-2 h-4 w-4 text-primary" /><p className="text-xs text-muted-foreground">Участие в crew</p><p className="text-sm font-semibold text-foreground">{dj.open_to_crew ? "Да" : "Нет"}</p></div>
+            </div>
+            {dj.format && <p className="mt-4 text-sm text-muted-foreground">Формат: <span className="font-semibold text-foreground">{dj.format}</span></p>}
+          </section>
+
+          <section className="premium-surface profile-section p-6 [animation-delay:160ms]">
+            <p className="text-xs font-semibold uppercase text-primary">Площадки</p>
+            <h2 className="mt-2 text-xl font-bold text-foreground">Где играл</h2>
+            {dj.played_at && dj.played_at.length > 0 ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {dj.played_at.map((place) => (
+                  <span key={place} className="rounded-full border border-white/10 bg-background/50 px-3 py-1 text-xs font-medium text-secondary-foreground">{place}</span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">Площадки пока не указаны.</p>
+            )}
+            {(dj.soundcloud || dj.instagram) && (
+              <div className="mt-5 space-y-2 border-t border-border/60 pt-4">
+                {dj.soundcloud && <a href={dj.soundcloud} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-semibold text-primary transition-colors hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5" /> SoundCloud</a>}
+                {dj.instagram && <a href={dj.instagram} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-semibold text-primary transition-colors hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5" /> Instagram</a>}
+              </div>
+            )}
+          </section>
+
+          <section className="premium-surface profile-section p-6 lg:col-span-2 [animation-delay:200ms]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase text-primary">Отзывы</p>
+                <h2 className="mt-1 text-xl font-bold text-foreground">Что говорят после выступлений</h2>
+              </div>
+              {reviewData.count > 1 && (
+                <button type="button" onClick={() => setShowReviews((value) => !value)} className="rounded-lg border border-primary/25 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10">
+                  {showReviews ? "Скрыть" : "Показать все"}
+                </button>
+              )}
+            </div>
+            {reviewData.count > 0 ? (
+              <div className={showReviews ? "grid max-h-72 gap-3 overflow-y-auto pr-1 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-2"}>
+                {(showReviews ? reviewData.reviews : reviewData.reviews.slice(0, 2)).map((review) => (
+                  <div key={review.id} className="premium-row px-4 py-3">
+                    <p className="text-xs font-semibold text-primary">{review.rating}/5</p>
+                    {review.comment && <p className="mt-2 text-sm text-secondary-foreground">{review.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Отзывы появятся после первых завершенных бронирований.</p>
+            )}
+          </section>
         </div>
       </div>
 

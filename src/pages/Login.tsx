@@ -87,26 +87,26 @@ const Login = () => {
     setForgotEmail(targetEmail);
   };
 
-  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all";
+  const inputCls = "premium-input";
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-8 space-y-6 shadow-xl">
-        <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+    <div className="flex min-h-screen items-center justify-center px-4 py-20">
+      <div className="auth-card max-w-sm space-y-6">
+        <Link to="/" className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Назад
         </Link>
         <div className="text-center">
-          <Link to="/" className="text-3xl font-bold tracking-tight inline-block mb-2">
+          <Link to="/" className="mb-2 inline-block text-3xl font-bold tracking-tight">
             <span className="text-primary">DJ</span>
             <span className="text-foreground">HUB</span>
           </Link>
-          <p className="text-sm text-muted-foreground">Войдите в аккаунт</p>
+          <p className="text-sm text-muted-foreground">Войдите в аккаунт и продолжайте внутри DJHUB</p>
         </div>
 
         <button
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-2 rounded-xl border border-border bg-background py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border/60 bg-background/55 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-background disabled:opacity-50"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -118,8 +118,8 @@ const Login = () => {
         </button>
 
         <div className="relative">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
-          <div className="relative flex justify-center text-xs"><span className="bg-card px-2 text-muted-foreground">или</span></div>
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/60" /></div>
+          <div className="relative flex justify-center text-xs"><span className="bg-background/80 px-2 text-muted-foreground">или</span></div>
         </div>
 
         <form onSubmit={handleEmailLogin} className="space-y-4">
@@ -144,7 +144,7 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className="btn-glow flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             Войти
@@ -152,7 +152,7 @@ const Login = () => {
         </form>
 
         {showForgotPassword && (
-          <form onSubmit={handlePasswordResetRequest} className="space-y-3 rounded-xl border border-border bg-background/50 p-3">
+          <form onSubmit={handlePasswordResetRequest} className="profile-section space-y-3 rounded-xl border border-border/60 bg-background/45 p-3">
             <p className="text-xs text-muted-foreground">Укажите email, и мы отправим ссылку для восстановления пароля.</p>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -168,7 +168,7 @@ const Login = () => {
             <button
               type="submit"
               disabled={resetLoading}
-              className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="btn-glow flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {resetLoading && <Loader2 className="h-4 w-4 animate-spin" />}
               Отправить ссылку

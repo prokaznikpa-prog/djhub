@@ -35,7 +35,7 @@ import {
 type EditButton = ReactNode;
 
 const ApplicationVisibilityTabs = ({ value, onChange }: { value: ApplicationVisibility; onChange: (value: ApplicationVisibility) => void }) => (
-  <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
+  <div className="premium-surface inline-flex p-0.5">
     {(["active", "hidden"] as const).map((option) => (
       <button
         key={option}
@@ -53,9 +53,12 @@ const ApplicationVisibilityTabs = ({ value, onChange }: { value: ApplicationVisi
 
 const ProfilePageShell = ({ editButton, children }: { editButton: EditButton; children: ReactNode }) => (
   <div className="min-h-screen pt-20 pb-12">
-    <div className="container mx-auto max-w-2xl px-4 space-y-5">
-      <div className="flex items-start justify-between">
-        <h1 className="text-xl font-bold text-foreground">Мой профиль</h1>
+    <div className="container mx-auto max-w-3xl px-4 space-y-5">
+      <div className="premium-surface flex items-start justify-between p-4">
+        <div>
+          <p className="text-xs font-semibold uppercase text-primary">DJHUB</p>
+          <h1 className="mt-1 text-xl font-bold text-foreground">Мой профиль</h1>
+        </div>
         {editButton}
       </div>
       {children}
@@ -67,12 +70,12 @@ const ProfileSummaryCard = ({ profile, children }: { profile: ProfileBase; child
   const avatar = getProfileAvatar(profile);
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div className="premium-surface p-4">
       <div className="flex gap-4">
         <div className="flex-1 min-w-0 space-y-2">{children}</div>
         {avatar && (
           <div className="shrink-0">
-            <img src={avatar} alt={profile.name} className="h-24 w-24 rounded-xl object-cover border border-border" />
+            <img src={avatar} alt={profile.name} className="h-28 w-28 rounded-2xl border border-border/60 object-cover shadow-xl shadow-black/25" />
           </div>
         )}
       </div>
@@ -83,7 +86,7 @@ const ProfileSummaryCard = ({ profile, children }: { profile: ProfileBase; child
 const ProfileStylePills = ({ profile, className = "flex flex-wrap gap-1.5" }: { profile: ProfileBase; className?: string }) => (
   <div className={className}>
     {getProfileStyles(profile).map((style) => (
-      <span key={style} className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{style}</span>
+      <span key={style} className="premium-chip">{style}</span>
     ))}
   </div>
 );
@@ -98,7 +101,7 @@ const Profile = () => {
   const editButton = (
     <button 
     data-testid="profile-edit-button"
-    onClick={() => setShowEdit(true)} className="flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors">
+    onClick={() => setShowEdit(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15">
       <Pencil className="h-3.5 w-3.5" /> Редактировать
     </button>
   );
@@ -114,7 +117,7 @@ const Profile = () => {
   if (user && profilesLoading) {
     return (
       <ProfilePageShell editButton={editButton}>
-        <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="premium-surface p-4">
           <p className="text-sm text-muted-foreground">Загружаем профиль...</p>
         </div>
       </ProfilePageShell>
@@ -231,7 +234,7 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
           ) : (
             <div className="max-h-[34vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[260px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
               {supaApps.map((a: any) => (
-                <div key={a.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2">
+                <div key={a.id} className="premium-row flex items-center justify-between px-3 py-2.5">
                   <div className="min-w-0">
                     <span className="text-sm font-semibold truncate block">{a.venue_posts?.title ?? "Публикация"}</span>
                     <div className="text-[10px] text-muted-foreground">
@@ -246,7 +249,7 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
                       </button>
                     )}
                     {appVisibility === "active" ? (
-                      <button onClick={() => handleHideApp(a.id)} className="p-1 rounded hover:bg-muted transition-colors" title="Скрыть">
+                      <button onClick={() => handleHideApp(a.id)} className="p-1 rounded hover:bg-white/10 transition-colors" title="Скрыть">
                         <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     ) : (
@@ -272,7 +275,7 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
           ) : (
             <div className="max-h-[30vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[220px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
               {invites.map((inv: any) => (
-                <div key={inv.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2">
+                <div key={inv.id} className="premium-row flex items-center justify-between px-3 py-2.5">
                   <div className="min-w-0">
                     <span className="text-sm font-semibold truncate block">{inv.venue_profiles?.name ?? "Площадка"}</span>
                     <div className="text-[10px] text-muted-foreground">{inv.venue_posts?.title ?? ""}</div>
@@ -410,7 +413,7 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
         <ProfileSummaryCard profile={venueProfile}>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-foreground truncate">{venueProfile.name}</h2>
-                <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">{getVenueOptionLabel(venueProfile.type, VENUE_TYPE_OPTIONS)}</span>
+                <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-xs font-medium text-secondary-foreground">{getVenueOptionLabel(venueProfile.type, VENUE_TYPE_OPTIONS)}</span>
               </div>
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
   <MapPin className="h-3.5 w-3.5" /> {getCityLabel(venueProfile.city)}
@@ -468,7 +471,7 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
           ) : (
             <div className="max-h-[32vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[240px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
               {myPosts.filter((post) => post.status === "open").map((p: any) => (
-                <div key={p.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2">
+                <div key={p.id} className="premium-row flex items-center justify-between px-3 py-2.5">
                   <div className="min-w-0">
                     <span className="text-sm font-semibold truncate block">{p.title}</span>
                     <div className="text-[10px] text-muted-foreground">{getGigTypeLabel(p.post_type)} · {p.budget || "—"}</div>
@@ -481,7 +484,7 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
                       onClick={() => handleTogglePost(p.id, p.status)}
                       disabled={p.status === "open" && engagedPostIds.has(p.id)}
                       title={p.status === "open" && engagedPostIds.has(p.id) ? "Публикацию с откликами, приглашениями, бронями или чатом нельзя закрыть" : undefined}
-                      className="p-1 rounded hover:bg-muted transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                      className="p-1 rounded hover:bg-white/10 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {p.status === "open" ? <ToggleRight className="h-3.5 w-3.5 text-primary" /> : <ToggleLeft className="h-3.5 w-3.5 text-muted-foreground" />}
                     </button>
@@ -507,7 +510,7 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
           ) : (
             <div className="max-h-[34vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[260px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
               {venueApps.map((a: any) => (
-                <div key={a.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2">
+                <div key={a.id} className="premium-row flex items-center justify-between px-3 py-2.5">
                   <div className="min-w-0">
                     <span className="text-sm font-semibold truncate block">{a.dj_profiles?.name ?? "DJ"}</span>
                     <div className="text-[10px] text-muted-foreground">{a.venue_posts?.title ?? ""}</div>
@@ -521,7 +524,7 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
                       </>
                     )}
                     {appVisibility === "active" ? (
-                      <button onClick={() => handleHideVenueApp(a.id)} className="p-1 rounded hover:bg-muted transition-colors" title="Скрыть">
+                      <button onClick={() => handleHideVenueApp(a.id)} className="p-1 rounded hover:bg-white/10 transition-colors" title="Скрыть">
                         <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     ) : (
@@ -547,7 +550,7 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
           ) : (
             <div className="max-h-[30vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[220px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
               {venueInvites.map((inv: any) => (
-                <div key={inv.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2">
+                <div key={inv.id} className="premium-row flex items-center justify-between px-3 py-2.5">
                   <div className="min-w-0">
                     <span className="text-sm font-semibold truncate block">{inv.dj_profiles?.name ?? "DJ"}</span>
                     <div className="text-[10px] text-muted-foreground">{inv.venue_posts?.title ?? ""}</div>

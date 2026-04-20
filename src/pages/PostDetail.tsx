@@ -104,10 +104,10 @@ const PostDetail = () => {
   return (
     <div className="min-h-screen pt-20 pb-12">
       <div className="container mx-auto max-w-2xl px-4">
-        <Link to="/posts" className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <Link to="/posts" className="mb-6 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Назад
         </Link>
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="premium-surface overflow-hidden">
           <div className="p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h1 className="text-2xl font-bold text-foreground">{post.title}</h1>
@@ -115,7 +115,7 @@ const PostDetail = () => {
                 <span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${getGigTypeBadgeClass(post.post_type)}`}>
                   {getGigTypeLabel(post.post_type)}
                 </span>
-                <span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${isClosed ? "bg-muted text-muted-foreground" : "bg-primary/15 text-primary"}`}>
+                <span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${isClosed ? "border border-white/10 bg-white/5 text-muted-foreground" : "bg-primary/15 text-primary"}`}>
                   {isClosed ? GIG_STATUS_LABEL.closed : GIG_STATUS_LABEL.open}
                 </span>
               </div>
@@ -125,22 +125,22 @@ const PostDetail = () => {
 
             <div className="flex items-center gap-1.5 text-muted-foreground"><MapPin className="h-4 w-4" /> {getCityLabel(post.city)}</div>
 
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border text-sm">
-              {post.event_date && <div className="flex items-center gap-2 text-muted-foreground"><Calendar className="h-4 w-4" /><span>{post.event_date}</span></div>}
-              {post.start_time && <div className="flex items-center gap-2 text-muted-foreground"><Clock className="h-4 w-4" /><span>{post.start_time}{post.duration ? ` · ${post.duration}` : ""}</span></div>}
-              {post.budget && <div className="flex items-center gap-2 text-primary font-mono"><Tag className="h-4 w-4" /><span>{post.budget}</span></div>}
-              {post.frequency && <div className="flex items-center gap-2 text-muted-foreground"><Briefcase className="h-4 w-4" /><span>{post.frequency}</span></div>}
+            <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4 text-sm">
+              {post.event_date && <div className="premium-row p-3 text-muted-foreground"><Calendar className="mb-1 h-4 w-4 text-primary" /><span>{post.event_date}</span></div>}
+              {post.start_time && <div className="premium-row p-3 text-muted-foreground"><Clock className="mb-1 h-4 w-4 text-primary" /><span>{post.start_time}{post.duration ? ` · ${post.duration}` : ""}</span></div>}
+              {post.budget && <div className="rounded-xl border border-primary/25 bg-primary/10 p-3 font-mono text-primary"><Tag className="mb-1 h-4 w-4" /><span>{post.budget}</span></div>}
+              {post.frequency && <div className="premium-row p-3 text-muted-foreground"><Briefcase className="mb-1 h-4 w-4 text-primary" /><span>{post.frequency}</span></div>}
             </div>
 
             {post.music_styles.length > 0 && (
               <div className="flex flex-wrap gap-2 pt-2">
                 {post.music_styles.map((s) => (
-                  <span key={s} className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">{s}</span>
+                  <span key={s} className="premium-chip">{s}</span>
                 ))}
               </div>
             )}
 
-            {post.description && <p className="text-sm text-muted-foreground pt-2 border-t border-border">{post.description}</p>}
+            {post.description && <p className="border-t border-border/60 pt-4 text-sm leading-relaxed text-secondary-foreground">{post.description}</p>}
 
             {post.post_type === "casting" && post.requirements && (
               <div className="pt-2 border-t border-border">
@@ -160,21 +160,21 @@ const PostDetail = () => {
 
             <div className="flex gap-3 pt-2">
               {isClosed ? (
-                <div className="w-full rounded-xl bg-muted py-2.5 text-center text-sm font-medium text-muted-foreground">Набор завершён</div>
+                <div className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 text-center text-sm font-medium text-muted-foreground">Набор завершён</div>
               ) : !user ? (
-                <Link to="/signup" className="flex-1 rounded-xl bg-primary py-2.5 text-center text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 flex items-center justify-center gap-2">
+                <Link to="/signup" className="btn-glow flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-center text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
                   <Send className="h-4 w-4" /> Войдите, чтобы откликнуться
                 </Link>
               ) : !djProfile ? (
-                <div className="w-full rounded-xl bg-muted/50 py-2.5 text-center text-sm text-muted-foreground">Только DJ могут откликаться</div>
+                <div className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 text-center text-sm text-muted-foreground">Только DJ могут откликаться</div>
               ) : applied ? (
-                <div className="flex-1 rounded-xl bg-primary/10 border border-primary/30 py-2.5 text-center text-sm font-medium text-primary flex items-center justify-center gap-2">
+                <div className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 py-2.5 text-center text-sm font-medium text-primary">
                   <Send className="h-4 w-4" /> Вы уже откликнулись
                 </div>
               ) : (
                 <button
                   onClick={handleApply}
-                  className="flex-1 rounded-xl bg-primary py-2.5 text-center text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 flex items-center justify-center gap-2"
+                  className="btn-glow flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-center text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                   <Send className="h-4 w-4" /> Откликнуться
                 </button>

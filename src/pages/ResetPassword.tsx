@@ -86,12 +86,12 @@ const ResetPassword = () => {
     navigate("/login", { replace: true });
   };
 
-  const inputCls = "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all";
+  const inputCls = "premium-input";
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-8 space-y-6 shadow-xl">
-        <Link to="/login" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+    <div className="flex min-h-screen items-center justify-center px-4 py-20">
+      <div className="auth-card max-w-sm space-y-6">
+        <Link to="/login" className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Назад
         </Link>
 
@@ -110,7 +110,7 @@ const ResetPassword = () => {
         ) : !hasRecoverySession ? (
           <div className="space-y-4 text-center">
             <p className="text-sm text-muted-foreground">Ссылка недействительна или истекла</p>
-            <Link to="/login" className="inline-block rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+            <Link to="/login" className="btn-glow inline-block rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
               Вернуться ко входу
             </Link>
           </div>
@@ -143,7 +143,7 @@ const ResetPassword = () => {
             <button
               type="submit"
               disabled={saving}
-              className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="btn-glow flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Сменить пароль

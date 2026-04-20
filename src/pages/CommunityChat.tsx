@@ -17,7 +17,7 @@ const CommunityChat = () => (
 
       <div className="space-y-3">
         {CHAT_SECTIONS.map((section) => (
-          <div key={section} className="rounded-xl border border-border bg-card p-4 space-y-2 opacity-60">
+          <div key={section} className="premium-surface space-y-3 p-4 opacity-70 transition-colors hover:border-primary/25">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MessageCircle className="h-4 w-4 text-primary" />
@@ -27,7 +27,7 @@ const CommunityChat = () => (
                 <span>0 участников</span>
               </div>
             </div>
-            <div className="rounded-lg bg-muted/30 border border-border/50 p-6 flex items-center justify-center">
+            <div className="flex items-center justify-center rounded-xl border border-border/50 bg-background/35 p-6">
               <p className="text-xs text-muted-foreground">Чат будет доступен позже</p>
             </div>
           </div>

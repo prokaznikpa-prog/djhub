@@ -48,13 +48,13 @@ const Index = () => {
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
             to="/role-select"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            className="btn-glow inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Начать <ArrowRight className="h-4 w-4" />
           </Link>
           <Link
             to="/djs"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card/50 px-8 py-3 text-sm font-medium text-foreground transition-colors hover:bg-card"
+            className="premium-row inline-flex items-center justify-center gap-2 px-8 py-3 text-sm font-medium text-foreground"
           >
             Смотреть как гость
           </Link>

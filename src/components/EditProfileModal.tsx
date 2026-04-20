@@ -99,9 +99,9 @@ const EditProfileModal = ({
   }, [onClose, saving]);
 
   const inputCls =
-    "w-full rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30";
+    "premium-input";
   const selectCls = "djhub-select w-full text-sm";
-  const labelCls = "block mb-1 text-xs font-medium text-foreground";
+  const labelCls = "block mb-1.5 text-xs font-semibold text-foreground/85";
 
   const currentStyleCount = useMemo(
     () => (type === "dj" ? djStyles.length : vStyles.length),
@@ -225,29 +225,32 @@ const EditProfileModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/75 px-4 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border/50 bg-card p-6 shadow-2xl"
+        className="profile-section max-h-[85vh] w-full max-w-2xl overflow-y-auto premium-surface p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-foreground">
-            Редактировать профиль
-          </h2>
+        <div className="mb-6 flex items-start justify-between gap-4 border-b border-border/50 pb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase text-primary">Профиль</p>
+            <h2 className="mt-1 text-xl font-bold text-foreground">
+              Редактировать профиль
+            </h2>
+          </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="rounded-lg border border-white/10 bg-background/45 p-1.5 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-5">
           {type === "dj" ? (
             <>
               <div>
@@ -269,10 +272,10 @@ const EditProfileModal = ({
                       <img
                         src={djPhoto}
                         alt="DJ preview"
-                        className="h-14 w-14 rounded-lg border border-border bg-black object-contain"
+                        className="h-16 w-16 rounded-lg border border-border/60 bg-black object-cover shadow-lg shadow-black/20"
                       />
                     ) : (
-                      <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-border/70 bg-background/50 transition-colors group-hover:border-primary/40">
                         <Upload className="h-4 w-4 text-muted-foreground" />
                       </div>
                     )}
@@ -295,7 +298,7 @@ const EditProfileModal = ({
                     <button
                       type="button"
                       onClick={() => setDjPhoto(null)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/45 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       Удалить
@@ -352,7 +355,7 @@ const EditProfileModal = ({
                   </span>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 rounded-xl border border-border/40 bg-background/25 p-3">
                   {MUSIC_STYLES.map((style) => (
                     <button
                       key={style}
@@ -362,8 +365,8 @@ const EditProfileModal = ({
                       }
                       className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${
                         djStyles.includes(style)
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border/50 bg-card text-muted-foreground hover:border-primary/40"
+                          ? "border-primary bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+                          : "border-white/10 bg-white/10 text-foreground/70 hover:border-primary/40 hover:text-foreground"
                       }`}
                     >
                       {style}
@@ -474,10 +477,10 @@ const EditProfileModal = ({
                       <img
                         src={vPhoto}
                         alt="Venue preview"
-                        className="h-14 w-14 rounded-lg border border-border bg-black object-contain"
+                        className="h-16 w-16 rounded-lg border border-border/60 bg-black object-cover shadow-lg shadow-black/20"
                       />
                     ) : (
-                      <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-border/70 bg-background/50 transition-colors group-hover:border-primary/40">
                         <Upload className="h-4 w-4 text-muted-foreground" />
                       </div>
                     )}
@@ -500,7 +503,7 @@ const EditProfileModal = ({
                     <button
                       type="button"
                       onClick={() => setVPhoto(null)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/45 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       Удалить
@@ -619,7 +622,7 @@ const EditProfileModal = ({
                   </span>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 rounded-xl border border-border/40 bg-background/25 p-3">
                   {MUSIC_STYLES.map((style) => (
                     <button
                       key={style}
@@ -629,8 +632,8 @@ const EditProfileModal = ({
                       }
                       className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${
                         vStyles.includes(style)
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border/50 bg-card text-muted-foreground hover:border-primary/40"
+                          ? "border-primary bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+                          : "border-white/10 bg-white/10 text-foreground/70 hover:border-primary/40 hover:text-foreground"
                       }`}
                     >
                       {style}
@@ -646,7 +649,7 @@ const EditProfileModal = ({
   type="button"
   onClick={handleSave}
   disabled={saving}
-  className="mt-2 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+  className="btn-glow mt-2 w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
 >
   {saving ? "Сохранение..." : "Сохранить"}
 </button>

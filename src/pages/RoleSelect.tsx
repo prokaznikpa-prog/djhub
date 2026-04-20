@@ -39,7 +39,7 @@ const RoleSelect = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-sm">
           <Link
             to="/register?role=dj"
-            className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card p-6 text-center transition-all hover:border-primary hover:shadow-[0_0_20px_hsl(142_71%_45%/0.15)]"
+            className="premium-card flex flex-col items-center gap-3 p-6 text-center"
           >
             <Music className="h-9 w-9 text-primary" />
             <span className="text-base font-semibold">DJ</span>
@@ -47,7 +47,7 @@ const RoleSelect = () => {
           </Link>
           <Link
             to="/register?role=venue"
-            className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card p-6 text-center transition-all hover:border-primary hover:shadow-[0_0_20px_hsl(142_71%_45%/0.15)]"
+            className="premium-card flex flex-col items-center gap-3 p-6 text-center"
           >
             <Building2 className="h-9 w-9 text-primary" />
             <span className="text-base font-semibold">Заведение</span>

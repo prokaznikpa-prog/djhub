@@ -118,7 +118,7 @@ const DjCatalog = () => {
           <button
             onClick={() => setShowFilters((v) => !v)}
             className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors ${
-              showFilters ? "border-primary/40 bg-primary/10 text-primary" : "border-border/40 bg-card/50 text-muted-foreground hover:text-foreground"
+              showFilters ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 bg-white/5 text-muted-foreground hover:border-primary/30 hover:text-foreground"
             }`}
           >
             <Filter className="h-3 w-3" /> Фильтры
@@ -132,7 +132,7 @@ const DjCatalog = () => {
             placeholder="Поиск по имени, городу или стилю..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-border/40 bg-background/50 pl-9 pr-9 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="premium-input pl-9 pr-9 py-2"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -142,7 +142,7 @@ const DjCatalog = () => {
         </div>
 
         {showFilters && (
-          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-border/30 bg-card/40 backdrop-blur-sm px-4 py-3">
+          <div className="premium-surface mb-5 flex flex-wrap items-center gap-2 px-4 py-3">
             <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
             <select className={selectCls} value={filterCity} onChange={(e) => setFilterCity(e.target.value)}>
               <option value="">Все города</option>

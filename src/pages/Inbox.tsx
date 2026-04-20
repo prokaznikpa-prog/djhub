@@ -30,7 +30,7 @@ import {
 import { toast } from "sonner";
 
 const ApplicationVisibilityTabs = memo(({ value, onChange }: { value: ApplicationVisibility; onChange: (value: ApplicationVisibility) => void }) => (
-  <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
+  <div className="premium-surface inline-flex p-0.5">
     {(["active", "hidden"] as const).map((option) => (
       <button
         key={option}
@@ -176,7 +176,7 @@ const BookingStatusControls = memo(({
             type="button"
             onClick={() => handleStatus(action)}
             disabled={!!updating}
-            className="rounded-lg border border-border bg-background/70 px-2 py-1 text-[10px] font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+            className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-foreground transition-colors hover:border-primary/30 hover:bg-primary/10 disabled:opacity-50"
           >
             {updating === action ? "..." : BOOKING_ACTION_LABEL[action]}
           </button>
@@ -211,7 +211,7 @@ const BookingStatusControls = memo(({
             onChange={(event) => setReviewComment(event.target.value)}
             maxLength={500}
             placeholder="Комментарий"
-            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1 text-[10px] text-foreground placeholder:text-muted-foreground"
+            className="premium-input min-w-0 flex-1 px-2 py-1 text-[10px]"
           />
           <button
             type="button"
@@ -365,8 +365,8 @@ const BookingChat = memo(({
   }, [participant, removeThreadLocal, updatePreview]);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-white/10 bg-[rgba(20,20,25,0.68)] shadow-xl shadow-black/20 backdrop-blur-md">
-      <div className="flex items-center justify-between border-b border-white/10 bg-background/20 px-4 py-3">
+    <section className="premium-surface overflow-hidden">
+      <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">
         <div>
           <h2 className="text-lg font-bold flex items-center gap-2">
             <MessageCircle className="h-4 w-4 text-primary" /> Переговоры по заявкам
@@ -376,7 +376,7 @@ const BookingChat = memo(({
         <button
           type="button"
           onClick={() => setCollapsed((value) => !value)}
-          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
           title={collapsed ? "Развернуть" : "Свернуть"}
         >
           {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -390,7 +390,7 @@ const BookingChat = memo(({
         <p className="text-sm text-muted-foreground">У вас пока нет диалогов</p>
       ) : (
         <div className={`grid gap-3 ${panelOpen ? "md:grid-cols-[260px_1fr]" : ""}`}>
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-background/35">
+          <div className="premium-surface overflow-hidden">
             <div className="border-b border-white/10 px-3 py-2">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Диалоги</p>
             </div>
@@ -412,7 +412,7 @@ const BookingChat = memo(({
                     className={`flex items-stretch rounded-xl border transition-colors ${
                       isSelected
                         ? "border-primary/50 bg-primary/10 shadow-sm shadow-primary/10"
-                        : "border-transparent bg-transparent hover:border-border hover:bg-card/70"
+                        : "border-transparent bg-transparent hover:border-white/10 hover:bg-white/5"
                     }`}
                   >
                     <button
@@ -446,7 +446,7 @@ const BookingChat = memo(({
                     <button
                       type="button"
                       onClick={() => handleHideThread(thread)}
-                      className="shrink-0 rounded-lg px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="shrink-0 rounded-lg px-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
                       title="Убрать чат из моего списка"
                     >
                       <EyeOff className="h-3.5 w-3.5" />
@@ -545,8 +545,8 @@ const ChatMessages = memo(({
   }, [sending, text, thread, participant, appendMessage, onPreview, removeMessage, currentPreview, replaceMessage]);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[rgba(20,20,25,0.72)] shadow-lg shadow-black/15 backdrop-blur-md">
-      <div className="flex items-start justify-between gap-3 border-b border-white/10 bg-card/55 px-4 py-3">
+    <div className="premium-surface min-w-0 overflow-hidden">
+      <div className="flex items-start justify-between gap-3 border-b border-white/10 bg-white/5 px-4 py-3">
         <div className="min-w-0">
           <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary/90">Чат по бронированию</p>
           <h3 className="mt-0.5 truncate text-sm font-semibold text-foreground">{thread.gigTitle ?? "Заявка"}</h3>
@@ -558,7 +558,7 @@ const ChatMessages = memo(({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
           title="Закрыть чат"
         >
           <XIcon className="h-4 w-4" />
@@ -570,12 +570,12 @@ const ChatMessages = memo(({
           const node = event.currentTarget;
           stickToBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
         }}
-        className="max-h-[392px] min-h-64 overflow-y-auto bg-background/15 px-4 py-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+        className="max-h-[392px] min-h-64 overflow-y-auto bg-black/10 px-4 py-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
       >
         {loading ? (
           <p className="text-xs text-muted-foreground">Загрузка сообщений...</p>
         ) : messages.length === 0 ? (
-          <div className="rounded-xl border border-border/50 bg-card/60 p-4 text-center">
+          <div className="premium-surface p-4 text-center">
             <p className="text-sm font-medium text-foreground">Начните диалог — быстрые ответы повышают шанс сделки</p>
             <p className="text-sm font-medium text-foreground">Обсудите детали бронирования</p>
             <p className="mt-1 text-xs text-muted-foreground">Время, сет, условия и финальное подтверждение лучше держать в одном месте.</p>
@@ -599,7 +599,7 @@ const ChatMessages = memo(({
                   <div className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
                     isMine
                       ? `${startsGroup ? "rounded-tr-2xl" : "rounded-tr-md"} ${endsGroup ? "rounded-br-md" : "rounded-br-2xl"} bg-primary text-primary-foreground`
-                      : `${startsGroup ? "rounded-tl-2xl" : "rounded-tl-md"} ${endsGroup ? "rounded-bl-md" : "rounded-bl-2xl"} border border-border/70 bg-card text-foreground`
+                      : `${startsGroup ? "rounded-tl-2xl" : "rounded-tl-md"} ${endsGroup ? "rounded-bl-md" : "rounded-bl-2xl"} border border-white/10 bg-white/10 text-foreground backdrop-blur-xl`
                   }`}>
                   <p className="whitespace-pre-wrap break-words">{message.text}</p>
                   {endsGroup && (
@@ -615,7 +615,7 @@ const ChatMessages = memo(({
           </div>
         )}
       </div>
-      <div className="border-t border-white/10 bg-card/55 p-3">
+      <div className="border-t border-white/10 bg-white/5 p-3">
         <div className="mb-2 flex flex-wrap items-center gap-1.5">
           {quickReplies.map((reply) => (
             <button
@@ -633,7 +633,7 @@ const ChatMessages = memo(({
         )}
         <div className="flex items-center gap-2">
         <input
-          className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm transition-colors placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="premium-input min-w-0 flex-1"
           value={text}
           maxLength={1000}
           onChange={(event) => setText(event.target.value)}
@@ -729,7 +729,7 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
         ) : (
           <div className="max-h-[30vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[220px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
             {invites.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-2.5">
+              <div key={inv.id} className="premium-row flex items-center justify-between px-4 py-2.5">
                 <div className="min-w-0">
                   <span className="text-sm font-semibold">{inv.venue_profiles?.name ?? "Площадка"}</span>
                   <div className="text-xs text-muted-foreground">
@@ -769,7 +769,7 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
         ) : (
           <div className="max-h-[34vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[260px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
             {apps.map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-2.5">
+              <div key={a.id} className="premium-row flex items-center justify-between px-4 py-2.5">
                 <div className="min-w-0">
                   <span className="text-sm font-semibold">{a.venue_posts?.title ?? "Публикация"}</span>
                   <div className="text-xs text-muted-foreground">
@@ -784,7 +784,7 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
                     </button>
                   )}
                   {appVisibility === "active" ? (
-                    <button onClick={() => handleHideApp(a)} className="p-1 rounded hover:bg-muted transition-colors" title="Скрыть">
+                    <button onClick={() => handleHideApp(a)} className="p-1 rounded hover:bg-white/10 transition-colors" title="Скрыть">
                       <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
                     </button>
                   ) : (
@@ -889,7 +889,7 @@ const VenueInbox = ({
         ) : (
           <div className="max-h-[34vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[260px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
             {apps.map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-2.5">
+              <div key={a.id} className="premium-row flex items-center justify-between px-4 py-2.5">
                 <div className="min-w-0">
                   <span className="text-sm font-semibold">{a.dj_profiles?.name ?? "DJ"}</span>
                   <div className="text-xs text-muted-foreground">{a.venue_posts?.title ?? ""} · {getGigTypeLabel(a.venue_posts?.post_type)}</div>
@@ -903,7 +903,7 @@ const VenueInbox = ({
                     </>
                   )}
                   {appVisibility === "active" ? (
-                    <button onClick={() => handleHideApp(a)} className="p-1 rounded hover:bg-muted transition-colors" title="Скрыть">
+                    <button onClick={() => handleHideApp(a)} className="p-1 rounded hover:bg-white/10 transition-colors" title="Скрыть">
                       <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
                     </button>
                   ) : (
@@ -927,7 +927,7 @@ const VenueInbox = ({
         ) : (
           <div className="max-h-[30vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[220px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
             {invites.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-2.5">
+              <div key={inv.id} className="premium-row flex items-center justify-between px-4 py-2.5">
                 <div className="min-w-0">
                   <span className="text-sm font-semibold">{inv.dj_profiles?.name ?? "DJ"}</span>
                   <div className="text-xs text-muted-foreground">{inv.venue_posts?.title ?? ""}</div>

@@ -24,17 +24,17 @@ const Dashboard = () => {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Link to="/profile" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5">
+          <Link to="/profile" className="btn-glow flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
             <User className="h-3.5 w-3.5" /> Мой профиль
           </Link>
-          <Link to="/djs" className="rounded-xl bg-secondary px-5 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors">Найти DJ</Link>
-          <Link to="/posts" className="rounded-xl bg-secondary px-5 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors">Выступления и кастинги</Link>
-          <Link to="/inbox" className="rounded-xl bg-secondary px-5 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors">Входящие</Link>
-          <Link to="/venues" className="rounded-xl bg-secondary px-5 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors">Заведения</Link>
+          <Link to="/djs" className="premium-row px-5 py-2.5 text-sm font-medium text-secondary-foreground hover:text-foreground">Найти DJ</Link>
+          <Link to="/posts" className="premium-row px-5 py-2.5 text-sm font-medium text-secondary-foreground hover:text-foreground">Выступления и кастинги</Link>
+          <Link to="/inbox" className="premium-row px-5 py-2.5 text-sm font-medium text-secondary-foreground hover:text-foreground">Входящие</Link>
+          <Link to="/venues" className="premium-row px-5 py-2.5 text-sm font-medium text-secondary-foreground hover:text-foreground">Заведения</Link>
         </div>
 
         {!djProfile && !venueProfile && (
-          <div className="rounded-2xl border border-border bg-card/60 p-8 text-center space-y-3">
+          <div className="premium-surface space-y-3 p-8 text-center">
             <p className="text-muted-foreground">Создайте профиль, чтобы получить доступ ко всем возможностям</p>
             <Link to="/register" className="inline-block rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
               Создать профиль
@@ -50,9 +50,9 @@ const Dashboard = () => {
 };
 
 const EmptySection = ({ text, linkTo, linkLabel }: { text: string; linkTo?: string; linkLabel?: string }) => (
-  <div className="rounded-xl border border-border/50 bg-muted/20 p-4 text-center">
+  <div className="premium-surface p-4 text-center">
     <p className="text-sm text-muted-foreground">{text}</p>
-    {linkTo && <Link to={linkTo} className="text-xs text-primary hover:underline mt-1 inline-block">{linkLabel}</Link>}
+    {linkTo && <Link to={linkTo} className="mt-1 inline-block text-xs font-semibold text-primary hover:underline">{linkLabel}</Link>}
   </div>
 );
 
@@ -70,7 +70,7 @@ const DjDashboard = ({ djProfile }: { djProfile: any }) => {
         ) : (
           <div className="space-y-1">
             {apps.slice(0, 5).map((a: any) => (
-              <div key={a.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-2">
+              <div key={a.id} className="premium-row flex items-center justify-between px-4 py-2">
                 <div>
                   <span className="text-sm font-semibold">{a.venue_posts?.title ?? "Публикация"}</span>
                   <div className="text-xs text-muted-foreground">{getGigTypeLabel(a.venue_posts?.post_type)}</div>
@@ -90,7 +90,7 @@ const DjDashboard = ({ djProfile }: { djProfile: any }) => {
         ) : (
           <div className="space-y-1">
             {invites.slice(0, 5).map((inv: any) => (
-              <div key={inv.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-2">
+              <div key={inv.id} className="premium-row flex items-center justify-between px-4 py-2">
                 <div>
                   <span className="text-sm font-semibold">{inv.venue_profiles?.name ?? "Площадка"}</span>
                   <div className="text-xs text-muted-foreground">{inv.venue_posts?.title ?? ""}</div>
@@ -110,7 +110,7 @@ const DjDashboard = ({ djProfile }: { djProfile: any }) => {
         ) : (
           <div className="space-y-1">
             {recommended.slice(0, 4).map((p: any) => (
-              <Link key={p.id} to={`/post/${p.id}`} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-2 hover:bg-card/80 transition-colors">
+              <Link key={p.id} to={`/post/${p.id}`} className="premium-row flex items-center justify-between px-4 py-2">
                 <div>
                   <span className="text-sm font-semibold">{p.title}</span>
                   <div className="text-xs text-muted-foreground">{getGigTypeLabel(p.post_type)} · {getCityLabel(p.city)}</div>
@@ -141,7 +141,7 @@ const VenueDashboard = ({ venueProfile }: { venueProfile: any }) => {
         ) : (
           <div className="space-y-1">
             {openPosts.slice(0, 5).map((p: any) => (
-              <div key={p.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-2">
+              <div key={p.id} className="premium-row flex items-center justify-between px-4 py-2">
                 <div>
                   <span className="text-sm font-semibold">{p.title}</span>
                   <div className="text-xs text-muted-foreground">{getGigTypeLabel(p.post_type)} · {p.status === "open" ? GIG_STATUS_LABEL.open : GIG_STATUS_LABEL.closed}</div>
@@ -160,7 +160,7 @@ const VenueDashboard = ({ venueProfile }: { venueProfile: any }) => {
         ) : (
           <div className="space-y-1">
             {apps.slice(0, 5).map((a: any) => (
-              <div key={a.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-2">
+              <div key={a.id} className="premium-row flex items-center justify-between px-4 py-2">
                 <div>
                   <span className="text-sm font-semibold">{a.dj_profiles?.name ?? "DJ"}</span>
                   <div className="text-xs text-muted-foreground">{a.venue_posts?.title ?? ""}</div>
@@ -180,7 +180,7 @@ const VenueDashboard = ({ venueProfile }: { venueProfile: any }) => {
         ) : (
           <div className="space-y-1">
             {invites.slice(0, 5).map((inv: any) => (
-              <div key={inv.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-2">
+              <div key={inv.id} className="premium-row flex items-center justify-between px-4 py-2">
                 <div>
                   <span className="text-sm font-semibold">{inv.dj_profiles?.name ?? "DJ"}</span>
                   <div className="text-xs text-muted-foreground">{inv.venue_posts?.title ?? ""}</div>

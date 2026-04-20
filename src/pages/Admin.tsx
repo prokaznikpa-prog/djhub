@@ -190,19 +190,19 @@ const Admin = () => {
       <div className="container mx-auto px-4 max-w-4xl">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/djs")} className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <button onClick={() => navigate("/djs")} className="rounded-lg border border-white/10 bg-background/35 p-2 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground">
               <ArrowLeft className="h-5 w-5" />
             </button>
             <h1 className="text-2xl font-bold"><span className="text-primary">Админ</span> панель</h1>
           </div>
-          <Link to="/admin/community" className="flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 transition-colors">
+          <Link to="/admin/community" className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/15">
             <MessageCircle className="h-3.5 w-3.5" /> Комьюнити чат
           </Link>
         </div>
 
-        <div className="flex gap-1 mb-6 border-b border-border overflow-x-auto">
+        <div className="premium-surface mb-6 flex gap-1 overflow-x-auto p-1">
           {tabs.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-2 text-xs font-medium rounded-t-xl border-b-2 transition-colors whitespace-nowrap ${tab === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            <button key={t.key} onClick={() => setTab(t.key)} className={`whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${tab === t.key ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-white/5 hover:text-foreground"}`}>
               {t.label} <span className="opacity-60">({t.count})</span>
             </button>
           ))}
@@ -211,22 +211,22 @@ const Admin = () => {
         {tab === "djs" && (
           <div className="space-y-1">
             {djItems.map((dj) => (
-              <div key={dj.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
+              <div key={dj.id} className="premium-row flex items-center justify-between gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold truncate">{dj.name}</span>
                     <span className={`text-[10px] font-mono ${statusColor[dj.status]}`}>{statusLabel[dj.status]}</span>
                   </div>
-                  <div className="text-xs text-muted-foreground">{dj.city} · {dj.price}</div>
+                  <div className="text-xs text-muted-foreground">{getCityLabel(dj.city)} · {dj.price}</div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => handleToggleDj(dj)} className="p-1.5 rounded hover:bg-muted transition-colors">
+                  <button onClick={() => handleToggleDj(dj)} className="p-1.5 rounded hover:bg-white/10 transition-colors">
                     {dj.status === "active" ? <EyeOff className="h-3.5 w-3.5 text-muted-foreground" /> : <Eye className="h-3.5 w-3.5 text-primary" />}
                   </button>
                   <button onClick={() => handleDjStatus(dj, "blocked")} className="p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Заблокировать">
                     <Ban className="h-3.5 w-3.5 text-destructive" />
                   </button>
-                  <button onClick={() => handleDjStatus(dj, "archived")} className="p-1.5 rounded hover:bg-muted transition-colors" title="В архив">
+                  <button onClick={() => handleDjStatus(dj, "archived")} className="p-1.5 rounded hover:bg-white/10 transition-colors" title="В архив">
                     <Archive className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
                   <button onClick={() => handleDeleteDj(dj.id)} className="p-1.5 rounded hover:bg-destructive/10 transition-colors">
@@ -241,22 +241,22 @@ const Admin = () => {
         {tab === "venues" && (
           <div className="space-y-1">
             {venueItems.map((v) => (
-              <div key={v.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
+              <div key={v.id} className="premium-row flex items-center justify-between gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold truncate">{v.name}</span>
                     <span className={`text-[10px] font-mono ${statusColor[v.status]}`}>{statusLabel[v.status]}</span>
                   </div>
-                  <div className="text-xs text-muted-foreground">{v.city} · {v.type}</div>
+                  <div className="text-xs text-muted-foreground">{getCityLabel(v.city)} · {v.type}</div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => handleToggleVenue(v)} className="p-1.5 rounded hover:bg-muted transition-colors">
+                  <button onClick={() => handleToggleVenue(v)} className="p-1.5 rounded hover:bg-white/10 transition-colors">
                     {v.status === "active" ? <EyeOff className="h-3.5 w-3.5 text-muted-foreground" /> : <Eye className="h-3.5 w-3.5 text-primary" />}
                   </button>
                   <button onClick={() => handleVenueStatus(v, "blocked")} className="p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Заблокировать">
                     <Ban className="h-3.5 w-3.5 text-destructive" />
                   </button>
-                  <button onClick={() => handleVenueStatus(v, "archived")} className="p-1.5 rounded hover:bg-muted transition-colors" title="В архив">
+                  <button onClick={() => handleVenueStatus(v, "archived")} className="p-1.5 rounded hover:bg-white/10 transition-colors" title="В архив">
                     <Archive className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
                   <button onClick={() => handleDeleteVenue(v.id)} className="p-1.5 rounded hover:bg-destructive/10 transition-colors">
@@ -272,7 +272,7 @@ const Admin = () => {
           <div className="space-y-1">
             {allPosts.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">Нет публикаций</p>}
             {allPosts.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
+              <div key={p.id} className="premium-row flex items-center justify-between gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold truncate">{p.title}</span>
@@ -284,16 +284,16 @@ const Admin = () => {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   {p.status === "open" && !["archived", "blocked"].includes((p as any).moderation_status ?? "active") && (
-                    <button onClick={() => handleForceClosePost(p.id)} className="p-1.5 rounded hover:bg-muted transition-colors" title="Закрыть">
+                    <button onClick={() => handleForceClosePost(p.id)} className="p-1.5 rounded hover:bg-white/10 transition-colors" title="Закрыть">
                       <X className="h-3.5 w-3.5 text-muted-foreground" />
                     </button>
                   )}
                   {!["archived", "blocked"].includes((p as any).moderation_status ?? "active") && (
-                    <button onClick={() => handlePostModeration(p.id, ((p as any).moderation_status ?? "active") === "hidden" ? "active" : "hidden")} className="p-1.5 rounded hover:bg-muted transition-colors" title="Скрыть из маркетплейса">
+                    <button onClick={() => handlePostModeration(p.id, ((p as any).moderation_status ?? "active") === "hidden" ? "active" : "hidden")} className="p-1.5 rounded hover:bg-white/10 transition-colors" title="Скрыть из маркетплейса">
                       {((p as any).moderation_status ?? "active") === "hidden" ? <Eye className="h-3.5 w-3.5 text-primary" /> : <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />}
                     </button>
                   )}
-                  <button onClick={() => handlePostModeration(p.id, "archived")} className="p-1.5 rounded hover:bg-muted transition-colors" title="В архив">
+                  <button onClick={() => handlePostModeration(p.id, "archived")} className="p-1.5 rounded hover:bg-white/10 transition-colors" title="В архив">
                     <Archive className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
                   <button onClick={() => handlePostModeration(p.id, "blocked")} className="p-1.5 rounded hover:bg-destructive/10 transition-colors" title="Заблокировать">
@@ -314,7 +314,7 @@ const Admin = () => {
           <div className="space-y-1">
             {allApps.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">Нет откликов</p>}
             {allApps.map((a) => (
-              <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
+              <div key={a.id} className="premium-row flex items-center justify-between gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold truncate">{a.dj_profiles?.name ?? "DJ"}</span>
@@ -340,7 +340,7 @@ const Admin = () => {
           <div className="space-y-1">
             {allInvites.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">Нет приглашений</p>}
             {allInvites.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
+              <div key={inv.id} className="premium-row flex items-center justify-between gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold truncate">{(inv as any).venue_profiles?.name ?? "Venue"}</span>

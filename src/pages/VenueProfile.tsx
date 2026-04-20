@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useReviewsForProfile, useVenuePostsByVenue } from "@/hooks/useMarketplace";
-import { MapPin, ArrowLeft, Disc, Utensils, Phone, Star } from "lucide-react";
+import { MapPin, ArrowLeft, Disc, Utensils, Star, ExternalLink } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import VenuePostCard from "@/components/VenuePostCard";
 import { getCityLabel } from "@/lib/geography";
+import { getVenueImage } from "@/lib/image-fallback";
 import {
   VENUE_TYPE_OPTIONS,
   VENUE_CONDITIONS_OPTIONS,
@@ -115,140 +116,139 @@ const VenueProfile = () => {
     venue.equipment,
     VENUE_EQUIPMENT_OPTIONS
   );
+  const heroImage = getVenueImage(venue.name, venue.image_url);
 
   return (
-    <div className="min-h-screen pt-20 pb-12">
-      <div className="container mx-auto max-w-5xl px-4">
-        <Link
-          to="/venues"
-          className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Назад
-        </Link>
+    <div className="min-h-screen pb-12">
+      <section className="relative min-h-[520px] overflow-hidden pt-20">
+        <img src={heroImage} alt={venue.name} className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/65 to-background/15" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/85 via-background/30 to-transparent" />
 
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          {venue.image_url ? (
-            <div className="aspect-[16/9] overflow-hidden">
-              <img
-                src={venue.image_url}
-                alt={venue.name}
-                className="h-full w-full object-cover"
-              />
-            </div>
-          ) : (
-            <div className="flex aspect-[16/9] items-center justify-center bg-muted/20 text-sm text-muted-foreground">
-              Фото пока не добавлено
-            </div>
-          )}
+        <div className="container relative z-10 mx-auto flex min-h-[500px] max-w-6xl flex-col justify-end px-4 pb-10">
+          <Link
+            to="/venues"
+            className="mb-auto inline-flex w-fit items-center gap-1.5 rounded-lg border border-white/10 bg-background/45 px-3 py-1.5 text-sm text-foreground/80 backdrop-blur-md transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Назад
+          </Link>
 
-          <div className="space-y-4 p-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h1 className="text-2xl font-bold text-foreground">
-                {venue.name}
-              </h1>
-
-              {venue.type && (
-                <span className="w-fit rounded-full bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
-                  {venueTypeLabel}
+          <div className="profile-section max-w-3xl space-y-5">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-foreground/80">
+                <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-primary" />{getCityLabel(venue.city)}</span>
+                {venue.address && <span>{venue.address}</span>}
+                <span className="inline-flex items-center gap-1.5">
+                  <Star className={`h-4 w-4 ${reviewData.count > 0 ? "fill-primary text-primary" : "text-foreground/45"}`} />
+                  {reviewData.count > 0 ? `${reviewData.averageRating.toFixed(1)} · ${reviewData.count} отзывов` : "Рейтинг появится скоро"}
                 </span>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
-              <div className="flex items-center gap-1.5">
-                <MapPin className="h-4 w-4" />
-                <span>{getCityLabel(venue.city)}</span>
               </div>
-
-              {venue.address && (
-                <span className="text-sm">· {venue.address}</span>
-              )}
-            </div>
-
-            {venue.contact && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Phone className="h-4 w-4" />
-                <span>{venue.contact}</span>
-              </div>
-            )}
-
-            {venue.description && (
-              <p className="text-secondary-foreground">{venue.description}</p>
-            )}
-
-            {venue.music_styles && venue.music_styles.length > 0 && (
+              <h1 className="text-4xl font-bold leading-tight text-foreground drop-shadow sm:text-6xl">{venue.name}</h1>
               <div className="flex flex-wrap gap-2">
+                {venue.type && <span className="rounded-full border border-primary/25 bg-primary/15 px-3 py-1 text-xs font-semibold text-primary backdrop-blur-md">{venueTypeLabel}</span>}
                 {venue.music_styles.map((style) => (
-                  <span
-                    key={style}
-                    className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary"
-                  >
-                    {style}
-                  </span>
+                  <span key={style} className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold text-foreground/85 backdrop-blur-md">{style}</span>
                 ))}
               </div>
-            )}
+            </div>
 
-            <div className="grid grid-cols-1 gap-3 border-t border-border pt-2 text-sm sm:grid-cols-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <a href="#venue-posts" className="inline-flex items-center gap-2 rounded-lg border border-primary/35 bg-background/50 px-5 py-2.5 text-sm font-semibold text-primary backdrop-blur-md transition-colors hover:bg-primary/10">
+                <ExternalLink className="h-4 w-4" /> Публикации
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="container mx-auto max-w-6xl px-4 pt-8">
+        <div className="grid gap-5 lg:grid-cols-[1.25fr_0.9fr]">
+          <section className="premium-surface profile-section p-6">
+            <p className="text-xs font-semibold uppercase text-primary">Описание</p>
+            <h2 className="mt-2 text-2xl font-bold text-foreground">О площадке</h2>
+            <p className="mt-3 text-sm leading-relaxed text-secondary-foreground">{venue.description || "Площадка пока не добавила описание."}</p>
+          </section>
+
+          <section className="premium-surface profile-section p-6 [animation-delay:80ms]">
+            <p className="text-xs font-semibold uppercase text-primary">Контакты</p>
+            <div className="mt-4 space-y-3 text-sm text-secondary-foreground">
+              <p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" />{getCityLabel(venue.city)}{venue.address ? `, ${venue.address}` : ""}</p>
+            </div>
+          </section>
+
+          <section className="premium-surface profile-section p-6 [animation-delay:120ms]">
+            <p className="text-xs font-semibold uppercase text-primary">Оборудование</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {venue.equipment && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Disc className="h-4 w-4" />
-                  <span>{venueEquipmentLabel}</span>
+                <div className="premium-row p-4">
+                  <Disc className="mb-2 h-4 w-4 text-primary" />
+                  <p className="text-xs text-muted-foreground">Пульт и техника</p>
+                  <p className="text-sm font-semibold text-foreground">{venueEquipmentLabel}</p>
                 </div>
               )}
-
               {venue.food_drinks && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Utensils className="h-4 w-4" />
-                  <span>{venueConditionLabel}</span>
+                <div className="premium-row p-4">
+                  <Utensils className="mb-2 h-4 w-4 text-primary" />
+                  <p className="text-xs text-muted-foreground">Условия</p>
+                  <p className="text-sm font-semibold text-foreground">{venueConditionLabel}</p>
                 </div>
               )}
             </div>
+          </section>
 
-            <div className="border-t border-border pt-3">
-              <div className="mb-1 flex items-center gap-2">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <Star key={i} className={`h-4 w-4 ${i <= Math.round(reviewData.averageRating) ? "fill-primary text-primary" : "text-border"}`} />
-                ))}
-                {reviewData.count > 0 && <span className="text-xs font-semibold text-foreground">{reviewData.averageRating.toFixed(1)}</span>}
+          <section className="premium-surface profile-section p-6 [animation-delay:160ms]">
+            <p className="text-xs font-semibold uppercase text-primary">Рейтинг</p>
+            <div className="mt-3 flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Star key={i} className={`h-5 w-5 ${i <= Math.round(reviewData.averageRating) ? "fill-primary text-primary" : "text-border"}`} />
+              ))}
+              {reviewData.count > 0 && <span className="text-sm font-semibold text-foreground">{reviewData.averageRating.toFixed(1)}</span>}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">{reviewData.count > 0 ? `${reviewData.count} отзывов` : "Рейтинг появится после первых бронирований"}</p>
+          </section>
+
+          <section className="premium-surface profile-section p-6 lg:col-span-2 [animation-delay:200ms]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase text-primary">Отзывы</p>
+                <h2 className="mt-1 text-xl font-bold text-foreground">Отзывы о площадке</h2>
               </div>
-              <p className="text-[11px] text-muted-foreground/60">
-                {reviewData.count > 0 ? `${reviewData.count} отзывов` : "Рейтинг появится после первых бронирований"}
-              </p>
-              {reviewData.count > 0 && (
-                <div className={showReviews ? "mt-2 max-h-48 space-y-2 overflow-y-auto pr-1" : "mt-2 space-y-2"}>
-                  {(showReviews ? reviewData.reviews : reviewData.reviews.slice(0, 1)).map((review) => (
-                    <div key={review.id} className="rounded-lg border border-border/60 bg-background/40 px-3 py-2">
-                      <p className="text-[11px] font-semibold text-primary">{review.rating}/5</p>
-                      {review.comment && <p className="mt-1 text-xs text-secondary-foreground">{review.comment}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
               {reviewData.count > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setShowReviews((value) => !value)}
-                  className="mt-2 text-[11px] font-semibold text-primary hover:underline"
-                >
-                  {showReviews ? "Скрыть отзывы" : "Показать отзывы"}
+                <button type="button" onClick={() => setShowReviews((value) => !value)} className="rounded-lg border border-primary/25 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10">
+                  {showReviews ? "Скрыть" : "Показать все"}
                 </button>
               )}
             </div>
-
-            {posts.length > 0 && (
-              <div className="space-y-3 border-t border-border pt-2">
-                <h3 className="text-lg font-semibold">Публикации</h3>
-
-                <div className="grid gap-2">
-                  {posts.map((post, index) => (
-                    <VenuePostCard key={post.id} post={post} index={index} />
-                  ))}
-                </div>
+            {reviewData.count > 0 ? (
+              <div className={showReviews ? "grid max-h-72 gap-3 overflow-y-auto pr-1 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-2"}>
+                {(showReviews ? reviewData.reviews : reviewData.reviews.slice(0, 2)).map((review) => (
+                  <div key={review.id} className="premium-row px-4 py-3">
+                    <p className="text-xs font-semibold text-primary">{review.rating}/5</p>
+                    {review.comment && <p className="mt-2 text-sm text-secondary-foreground">{review.comment}</p>}
+                  </div>
+                ))}
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Отзывы появятся после первых завершенных бронирований.</p>
             )}
-          </div>
+          </section>
+
+          <section id="venue-posts" className="premium-surface profile-section p-6 lg:col-span-2 [animation-delay:240ms]">
+            <div className="mb-4">
+              <p className="text-xs font-semibold uppercase text-primary">Публикации</p>
+              <h2 className="mt-1 text-xl font-bold text-foreground">Открытые выступления и кастинги</h2>
+            </div>
+            {posts.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {posts.map((post, index) => (
+                  <VenuePostCard key={post.id} post={post} index={index} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">У площадки пока нет активных публикаций.</p>
+            )}
+          </section>
         </div>
       </div>
     </div>

@@ -91,13 +91,13 @@ const FeaturedDjCarousel = ({ djs }: Props) => {
         {/* Arrows */}
         <button
           onClick={() => go(-1)}
-          className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 z-30 rounded-full bg-card/80 border border-border/40 p-2.5 text-muted-foreground backdrop-blur-sm transition-all duration-200 hover:text-primary hover:border-primary/30 hover:bg-card hover:scale-110 active:scale-95"
+          className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full border border-white/10 bg-background/65 p-2.5 text-muted-foreground backdrop-blur-xl transition-all duration-200 hover:scale-110 hover:border-primary/30 hover:bg-background/90 hover:text-primary active:scale-95 sm:left-6"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
         <button
           onClick={() => go(1)}
-          className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 z-30 rounded-full bg-card/80 border border-border/40 p-2.5 text-muted-foreground backdrop-blur-sm transition-all duration-200 hover:text-primary hover:border-primary/30 hover:bg-card hover:scale-110 active:scale-95"
+          className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full border border-white/10 bg-background/65 p-2.5 text-muted-foreground backdrop-blur-xl transition-all duration-200 hover:scale-110 hover:border-primary/30 hover:bg-background/90 hover:text-primary active:scale-95 sm:right-6"
         >
           <ChevronRight className="h-5 w-5" />
         </button>
@@ -127,10 +127,10 @@ const FeaturedDjCarousel = ({ djs }: Props) => {
 
 const CarouselCard = ({ dj, isCenter }: { dj: DJ; isCenter: boolean }) => (
   <div
-    className={`rounded-2xl overflow-hidden border ${
+    className={`premium-card overflow-hidden ${
       isCenter
-        ? "bg-card/90 border-primary/20 shadow-[0_12px_50px_-12px_hsl(142_71%_45%/0.18),0_8px_30px_-6px_hsl(0_0%_0%/0.5)]"
-        : "bg-card/30 border-border/20"
+        ? "border-primary/20"
+        : "opacity-75"
     }`}
     style={{
       transition: `box-shadow 700ms ${EASE}, border-color 700ms ${EASE}, background 700ms ${EASE}`,
@@ -169,7 +169,7 @@ const CarouselCard = ({ dj, isCenter }: { dj: DJ; isCenter: boolean }) => (
               href={dj.contact}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-border/50 bg-card px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-primary hover:border-primary/30"
+              className="premium-row flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium text-muted-foreground hover:text-primary"
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>

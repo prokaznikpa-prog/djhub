@@ -22,7 +22,7 @@ const TEXT_LIMIT = 200;
 const digitsOnly = (value: string) => value.replace(/\D/g, "");
 
 const PreviewDjCard = ({ dj }: { dj: Tables<"dj_profiles"> }) => (
-  <div className="overflow-hidden rounded-md border border-border bg-card opacity-80">
+  <div className="premium-card overflow-hidden opacity-85">
     {dj.image_url && (
       <div className="aspect-[2/1] overflow-hidden">
         <img src={dj.image_url} alt={dj.name} className="h-full w-full object-cover" />
@@ -42,7 +42,7 @@ const PreviewDjCard = ({ dj }: { dj: Tables<"dj_profiles"> }) => (
 );
 
 const PreviewVenueCard = ({ venue }: { venue: Tables<"venue_profiles"> }) => (
-  <div className="overflow-hidden rounded-md border border-border bg-card opacity-80">
+  <div className="premium-card overflow-hidden opacity-85">
     {venue.image_url && (
       <div className="aspect-[2/1] overflow-hidden">
         <img src={venue.image_url} alt={venue.name} className="h-full w-full object-cover" />
@@ -261,8 +261,7 @@ const Register = () => {
   const errorMsg = (key: string) =>
     errors[key] ? <p className="mt-0.5 text-[10px] text-destructive">{errors[key]}</p> : null;
 
-  const inputCls =
-    "input-glow w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow duration-150";
+  const inputCls = "premium-input";
   const selectCls = "djhub-select w-full text-sm";
   const labelCls = "mb-1 block text-xs font-medium text-foreground";
   const requiredMark = <span className="ml-0.5 text-destructive">*</span>;
@@ -271,7 +270,7 @@ const Register = () => {
     <div className="min-h-screen">
       <div className="relative flex min-h-screen" ref={formRef}>
         <div className="flex w-full flex-col items-center justify-start overflow-y-auto px-6 py-10">
-          <div className="w-full max-w-lg space-y-6 rounded-xl border border-border/50 glass p-6">
+          <div className="auth-card max-w-lg space-y-6">
             <div>
               <Link
                 to="/role-select"
@@ -315,7 +314,7 @@ const Register = () => {
                           className="h-16 w-16 rounded-md border border-border bg-black object-contain"
                         />
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-border bg-muted/30 transition-colors group-hover:border-primary/50">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-white/15 bg-white/5 transition-colors group-hover:border-primary/50">
                           <Upload className="h-5 w-5 text-muted-foreground" />
                         </div>
                       )}
@@ -393,7 +392,7 @@ const Register = () => {
                           className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${
                             djStyles.includes(s)
                               ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border bg-card text-muted-foreground hover:border-primary/50"
+                              : "border-white/10 bg-white/5 text-muted-foreground hover:border-primary/50 hover:bg-primary/10"
                           }`}
                         >
                           {s}
@@ -537,7 +536,7 @@ const Register = () => {
                           className="h-16 w-16 rounded-md border border-border bg-black object-contain"
                         />
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-border bg-muted/30 transition-colors group-hover:border-primary/50">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-white/15 bg-white/5 transition-colors group-hover:border-primary/50">
                           <Upload className="h-5 w-5 text-muted-foreground" />
                         </div>
                       )}
@@ -618,7 +617,7 @@ const Register = () => {
                           className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${
                             venueStyles.includes(s)
                               ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border bg-card text-muted-foreground hover:border-primary/50"
+                              : "border-white/10 bg-white/5 text-muted-foreground hover:border-primary/50 hover:bg-primary/10"
                           }`}
                         >
                           {s}
@@ -707,7 +706,7 @@ const Register = () => {
         </div>
       </div>
 
-      <div className="border-t border-border bg-card/50 px-6 py-10">
+      <div className="border-t border-white/10 bg-background/45 px-6 py-10 backdrop-blur-xl">
         <div className="mx-auto max-w-4xl space-y-6 text-center">
           <h2 className="text-xl font-bold">
             Уже на <span className="text-primary">DJHUB</span>

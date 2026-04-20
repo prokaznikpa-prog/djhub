@@ -19,8 +19,8 @@ const GigCard = ({ gig, index = 0 }: { gig: Gig; index?: number }) => {
 
   return (
     <div
-      className={`group rounded-2xl border bg-card/60 overflow-hidden transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_6px_24px_-6px_hsl(0_0%_0%/0.4)] ${
-        isClosed ? "border-border/30 opacity-60" : "border-border/40 hover:border-border/60"
+      className={`premium-card group overflow-hidden ${
+        isClosed ? "opacity-60" : ""
       }`}
       style={{ animationDelay: `${index * 60}ms` }}
     >
@@ -34,7 +34,7 @@ const GigCard = ({ gig, index = 0 }: { gig: Gig; index?: number }) => {
               </button>
             )}
             <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${
-              isClosed ? "bg-muted text-muted-foreground" : "bg-primary/15 text-primary"
+              isClosed ? "bg-white/10 text-muted-foreground" : "bg-primary/15 text-primary"
             }`}>
               {isClosed ? "Закрыто" : "Открыто"}
             </span>
@@ -56,9 +56,9 @@ const GigCard = ({ gig, index = 0 }: { gig: Gig; index?: number }) => {
         </div>
 
         {isClosed ? (
-          <div className="w-full rounded-xl bg-muted/50 py-2 text-center text-[11px] font-medium text-muted-foreground">Набор завершён</div>
+          <div className="w-full rounded-lg border border-white/10 bg-white/5 py-2 text-center text-[11px] font-medium text-muted-foreground">Набор завершён</div>
         ) : (
-          <Link to={`/gig/${gig.id}`} className="block w-full rounded-xl bg-primary/10 py-2 text-center text-[11px] font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground">
+          <Link to={`/gig/${gig.id}`} className="block w-full rounded-lg bg-primary/10 py-2 text-center text-[11px] font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground">
             Подробнее
           </Link>
         )}

@@ -21,7 +21,7 @@ const CreateGigModal = ({ onClose, onCreated }: Props) => {
   const [budget, setBudget] = useState("");
   const [format, setFormat] = useState("");
 
-  const inputCls = "w-full rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-shadow";
+  const inputCls = "premium-input";
   const selectCls = "djhub-select w-full text-sm";
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -49,11 +49,11 @@ const CreateGigModal = ({ onClose, onCreated }: Props) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-border/50 bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/75 px-4 backdrop-blur-md">
+      <div className="premium-surface w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-foreground">Создать выступление</h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <button onClick={onClose} className="rounded-lg border border-white/10 bg-background/45 p-1.5 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -88,7 +88,7 @@ const CreateGigModal = ({ onClose, onCreated }: Props) => {
                   className={`rounded-full px-2.5 py-1 text-[10px] font-medium border transition-colors ${
                     style === s
                       ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-card text-muted-foreground border-border/50 hover:border-primary/40"
+                      : "border-white/10 bg-white/5 text-muted-foreground hover:border-primary/40 hover:bg-primary/10"
                   }`}
                 >
                   {s}
@@ -106,7 +106,7 @@ const CreateGigModal = ({ onClose, onCreated }: Props) => {
               <input className={inputCls} value={format} onChange={(e) => setFormat(e.target.value)} placeholder="Разово / Регулярка" />
             </div>
           </div>
-          <button type="submit" className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 mt-2">
+          <button type="submit" className="btn-glow mt-2 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
             Создать
           </button>
         </form>
