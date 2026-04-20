@@ -8,7 +8,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
 import { preloadCriticalRoutes, routeLoaders } from "@/lib/routePreload";
-
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Footer from "./components/footer";
+import { AuthProvider } from "@/hooks/useAuth";
 const Index = lazy(routeLoaders.index);
 const RoleSelect = lazy(routeLoaders.roleSelect);
 const Register = lazy(routeLoaders.register);
@@ -46,13 +48,21 @@ const AppContent = () => {
   );
 
   useEffect(() => {
-    const idle = window.requestIdleCallback ?? ((callback: IdleRequestCallback) => window.setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 0 }), 600));
-    const idleId = idle(preloadCriticalRoutes);
-    return () => {
-      if ("cancelIdleCallback" in window) window.cancelIdleCallback(idleId);
-      else window.clearTimeout(idleId);
-    };
-  }, []);
+  const idle = window.requestIdleCallback
+    ? (callback: IdleRequestCallback) => window.requestIdleCallback(callback)
+    : (callback: IdleRequestCallback) =>
+        window.setTimeout(() => callback({} as IdleDeadline), 600);
+
+  const idleId: number = idle(preloadCriticalRoutes);
+
+  return () => {
+    if ("cancelIdleCallback" in window) {
+      (window as any).cancelIdleCallback(idleId);
+    } else {
+      clearTimeout(idleId as number);
+    }
+  };
+}, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -70,39 +80,40 @@ const AppContent = () => {
   }, [navigate]);
 
   return (
-    <>
-      {showNav && <Navbar />}
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/role-select" element={<RoleSelect />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/admin" element={<AuthGuard><Admin /></AuthGuard>} />
-          <Route path="/admin/community" element={<AuthGuard><CommunityChat /></AuthGuard>} />
-          <Route path="/djs" element={<DjCatalog />} />
-          <Route path="/gigs" element={<GigListings />} />
-          <Route path="/gig/:id" element={<GigDetail />} />
-          <Route path="/dj/:id" element={<DjProfile />} />
-          <Route path="/venues" element={<VenueCatalog />} />
-          <Route path="/venue/:id" element={<VenueProfile />} />
-          <Route path="/dashboard" element={<AuthGuard><Dashboard /></AuthGuard>} />
-          <Route path="/profile" element={<AuthGuard><Profile /></AuthGuard>} />
-          <Route path="/inbox" element={<AuthGuard><Inbox /></AuthGuard>} />
-          <Route path="/posts" element={<PostListings />} />
-          <Route path="/community" element={<CommunityChat />} />
-          <Route path="/post/:id" element={<PostDetail />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
-    </>
+<>
+  {showNav && <Navbar />}
+
+  <Suspense fallback={<PageLoader />}>
+    <Routes>
+      <Route path="/" element={<Index />} />
+      <Route path="/role-select" element={<RoleSelect />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/admin" element={<AuthGuard><Admin /></AuthGuard>} />
+      <Route path="/admin/community" element={<AuthGuard><CommunityChat /></AuthGuard>} />
+      <Route path="/djs" element={<DjCatalog />} />
+      <Route path="/gigs" element={<GigListings />} />
+      <Route path="/gig/:id" element={<GigDetail />} />
+      <Route path="/dj/:id" element={<DjProfile />} />
+      <Route path="/venues" element={<VenueCatalog />} />
+      <Route path="/venue/:id" element={<VenueProfile />} />
+      <Route path="/dashboard" element={<AuthGuard><Dashboard /></AuthGuard>} />
+      <Route path="/profile" element={<AuthGuard><Profile /></AuthGuard>} />
+      <Route path="/inbox" element={<AuthGuard><Inbox /></AuthGuard>} />
+      <Route path="/posts" element={<PostListings />} />
+      <Route path="/community" element={<CommunityChat />} />
+      <Route path="/post/:id" element={<PostDetail />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  </Suspense>
+
+  {showNav && <Footer />}
+</>
   );
 };
-
-import { AuthProvider } from "@/hooks/useAuth";
-
 const App = () => (
   <AuthProvider>
     <TooltipProvider>

@@ -28,19 +28,19 @@ const VenuePostCard = ({ post, index = 0, isBestMatch = false, matchReasons = []
         setCachedValue(`post:${post.id}`, post);
       }}
     >
-        <div className="space-y-3 px-4 py-3.5">
+        <div className="space-y-4 p-5">
         {(isBestMatch || matchReasons.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium">
             {isBestMatch && <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-primary">🔥 Лучшее совпадение</span>}
             {matchReasons.map((reason) => (
-              <span key={reason} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-foreground/75">{reason}</span>
+              <span key={reason} className="max-w-full truncate rounded-full border border-white/5 bg-[#1c2027] px-2 py-0.5 text-gray-300">{reason}</span>
             ))}
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-foreground truncate">{post.title}</h3>
-          <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <h3 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">{post.title}</h3>
+          <div className="flex shrink-0 items-center gap-1.5">
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getGigTypeBadgeClass(post.post_type)}`}>
               {getGigTypeLabel(post.post_type)}
             </span>
@@ -52,19 +52,19 @@ const VenuePostCard = ({ post, index = 0, isBestMatch = false, matchReasons = []
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <MapPin className="h-3 w-3 text-primary/70" />
-            {getCityLabel(post.city)}
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
+            <MapPin className="h-4 w-4 shrink-0 text-primary/70" />
+            <span className="min-w-0 truncate">{getCityLabel(post.city)}</span>
           </div>
-          {post.budget && <span className="text-xs font-mono text-primary">{post.budget}</span>}
+          {post.budget && <span className="max-w-[45%] shrink-0 truncate text-xs font-mono text-primary">{post.budget}</span>}
         </div>
 
-        <div className="premium-row flex flex-wrap gap-x-3 gap-y-1 px-3 py-2 text-[11px] text-muted-foreground">
-          {post.event_date && <span className="flex items-center gap-1"><Calendar className="h-3 w-3 opacity-60" />{post.event_date}</span>}
-          {post.start_time && <span className="flex items-center gap-1"><Clock className="h-3 w-3 opacity-60" />{post.start_time}</span>}
-          {post.music_styles.length > 0 && <span className="flex items-center gap-1"><Music className="h-3 w-3 opacity-60" />{post.music_styles.slice(0, 2).join(", ")}</span>}
-          {post.frequency && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3 opacity-60" />{post.frequency}</span>}
+        <div className="premium-row flex min-w-0 flex-wrap gap-x-3 gap-y-2 px-3 py-2 text-[11px] text-gray-400">
+          {post.event_date && <span className="flex min-w-0 items-center gap-2"><Calendar className="h-4 w-4 shrink-0 opacity-70" /><span className="min-w-0 truncate">{post.event_date}</span></span>}
+          {post.start_time && <span className="flex min-w-0 items-center gap-2"><Clock className="h-4 w-4 shrink-0 opacity-70" /><span className="min-w-0 truncate">{post.start_time}</span></span>}
+          {post.music_styles.length > 0 && <span className="flex min-w-0 items-center gap-2"><Music className="h-4 w-4 shrink-0 opacity-70" /><span className="min-w-0 truncate">{post.music_styles.slice(0, 2).join(", ")}</span></span>}
+          {post.frequency && <span className="flex min-w-0 items-center gap-2"><Briefcase className="h-4 w-4 shrink-0 opacity-70" /><span className="min-w-0 truncate">{post.frequency}</span></span>}
         </div>
 
         {post.description && (
@@ -72,7 +72,7 @@ const VenuePostCard = ({ post, index = 0, isBestMatch = false, matchReasons = []
         )}
 
         {isClosed ? (
-          <div className="w-full rounded-lg border border-white/10 bg-white/5 py-2 text-center text-[11px] font-medium text-muted-foreground">Набор завершён</div>
+          <div className="w-full rounded-lg border border-white/5 bg-[#1c2027] py-2 text-center text-[11px] font-medium text-gray-400">Набор завершён</div>
         ) : (
           <Link to={`/post/${post.id}`} onFocus={() => {
             preloadRoute(`/post/${post.id}`);

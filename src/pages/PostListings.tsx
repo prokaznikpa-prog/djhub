@@ -127,7 +127,7 @@ const PostListings = () => {
             placeholder="Поиск по названию, городу или стилю..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="premium-input pl-9 pr-9 py-2"
+            className="premium-input w-full !pl-14 pr-9 py-2"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -147,7 +147,7 @@ const PostListings = () => {
               <option value="">Все стили</option>
               {MUSIC_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <select className={selectCls} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <select className={selectCls} value={filterType} onChange={(e) => setFilterType(e.target.value as any)}>
               <option value="">Все типы</option>
               {GIG_TYPE_FILTER_OPTIONS.map((type) => (
                 <option key={type.value} value={type.value}>{type.label}</option>

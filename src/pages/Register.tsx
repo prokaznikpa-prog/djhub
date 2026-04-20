@@ -17,9 +17,20 @@ import {
   VENUE_CONDITIONS_OPTIONS,
   getVenueOptionLabel,
 } from "@/lib/venueOptions";
+import { getCachedValue, setCachedValue } from "@/lib/requestCache";
 
 const TEXT_LIMIT = 200;
 const digitsOnly = (value: string) => value.replace(/\D/g, "");
+
+const upsertCachedProfile = <TProfile extends { id: string; created_at?: string }>(cacheKey: string, profile: TProfile) => {
+  const current = getCachedValue<TProfile[]>(cacheKey, { allowStale: true }) ?? [];
+  const next = [profile, ...current.filter((item) => item.id !== profile.id)].sort((a, b) => {
+    const aTime = new Date(a.created_at ?? "").getTime() || 0;
+    const bTime = new Date(b.created_at ?? "").getTime() || 0;
+    return bTime - aTime;
+  });
+  setCachedValue(cacheKey, next);
+};
 
 const PreviewDjCard = ({ dj }: { dj: Tables<"dj_profiles"> }) => (
   <div className="premium-card overflow-hidden opacity-85">
@@ -219,6 +230,8 @@ const Register = () => {
           .single();
 
         if (supaErr || !supaRow) throw supaErr ?? new Error("DJ profile was not created");
+        setCachedValue(`dj:${supaRow.id}`, supaRow);
+        upsertCachedProfile<Tables<"dj_profiles">>("catalog:djs:active", supaRow);
         await refreshProfiles();
         toast.success("Профиль DJ создан!");
         navigate("/djs");
@@ -242,6 +255,8 @@ const Register = () => {
           .single();
 
         if (supaErr || !supaRow) throw supaErr ?? new Error("Venue profile was not created");
+        setCachedValue(`venue:${supaRow.id}`, supaRow);
+        upsertCachedProfile<Tables<"venue_profiles">>("catalog:venues:active", supaRow);
         await refreshProfiles();
         toast.success("Профиль заведения создан!");
         navigate("/djs");
@@ -269,15 +284,15 @@ const Register = () => {
   return (
     <div className="min-h-screen">
       <div className="relative flex min-h-screen" ref={formRef}>
-        <div className="flex w-full flex-col items-center justify-start overflow-y-auto px-6 py-10">
+        <div className="flex w-full flex-col items-center justify-start overflow-y-auto px-4 py-10 sm:px-6">
           <div className="auth-card max-w-lg space-y-6">
             <div>
               <Link
                 to="/role-select"
-                className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                className="mb-3 inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
               >
-                <ArrowLeft className="h-4 w-4" />
-                Назад к выбору роли
+                <ArrowLeft className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 truncate">Назад к выбору роли</span>
               </Link>
 
               <div className="text-center">
@@ -311,14 +326,14 @@ const Register = () => {
                         <img
                           src={djPhotoPreview}
                           alt="preview"
-                          className="h-16 w-16 rounded-md border border-border bg-black object-contain"
+                          className="h-20 w-20 shrink-0 rounded-xl border border-white/10 bg-black object-cover object-center"
                         />
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-white/15 bg-white/5 transition-colors group-hover:border-primary/50">
-                          <Upload className="h-5 w-5 text-muted-foreground" />
+                        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-dashed border-white/15 bg-[#0f1115] transition-colors group-hover:border-primary/50">
+                          <Upload className="h-5 w-5 shrink-0 text-muted-foreground" />
                         </div>
                       )}
-                      <span className="text-xs text-muted-foreground transition-colors group-hover:text-foreground">
+                      <span className="min-w-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
                         Загрузить фото (до 5 МБ)
                       </span>
                       <input
@@ -330,7 +345,7 @@ const Register = () => {
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label className={labelCls}>
                         Город{requiredMark}
@@ -423,7 +438,7 @@ const Register = () => {
                         {errorMsg("djBio")}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
                         <div>
                           <label className={labelCls}>Опыт</label>
                           <select
@@ -465,7 +480,7 @@ const Register = () => {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
                         <div>
                           <label className={labelCls}>SoundCloud</label>
                           <input
@@ -487,7 +502,7 @@ const Register = () => {
                         </div>
                       </div>
 
-                      <div className="flex gap-6">
+                      <div className="flex flex-wrap gap-4">
                         <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
                           <input
                             type="checkbox"
@@ -533,14 +548,14 @@ const Register = () => {
                         <img
                           src={venuePhotoPreview}
                           alt="preview"
-                          className="h-16 w-16 rounded-md border border-border bg-black object-contain"
+                          className="h-20 w-20 shrink-0 rounded-xl border border-white/10 bg-black object-cover object-center"
                         />
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-white/15 bg-white/5 transition-colors group-hover:border-primary/50">
-                          <Upload className="h-5 w-5 text-muted-foreground" />
+                        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-dashed border-white/15 bg-[#0f1115] transition-colors group-hover:border-primary/50">
+                          <Upload className="h-5 w-5 shrink-0 text-muted-foreground" />
                         </div>
                       )}
-                      <span className="text-xs text-muted-foreground transition-colors group-hover:text-foreground">
+                      <span className="min-w-0 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
                         Загрузить фото (до 5 МБ)
                       </span>
                       <input
@@ -552,7 +567,7 @@ const Register = () => {
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label className={labelCls}>
                         Город{requiredMark}
@@ -658,7 +673,7 @@ const Register = () => {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
                         <div>
                           <label className={labelCls}>Оборудование</label>
                           <select
@@ -706,7 +721,7 @@ const Register = () => {
         </div>
       </div>
 
-      <div className="border-t border-white/10 bg-background/45 px-6 py-10 backdrop-blur-xl">
+      <div className="border-t border-white/10 bg-background px-6 py-10">
         <div className="mx-auto max-w-4xl space-y-6 text-center">
           <h2 className="text-xl font-bold">
             Уже на <span className="text-primary">DJHUB</span>

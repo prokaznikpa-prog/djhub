@@ -148,7 +148,8 @@
   }
 
   .djhub-select {
-    @apply h-9 appearance-none rounded-lg border border-border/60 bg-background/80 px-3 pr-9 text-xs font-medium text-foreground shadow-sm transition-colors focus:border-primary/70 focus:outline-none focus:ring-2 focus:ring-primary/20;
+    @apply h-9 appearance-none rounded-lg border border-border/60 px-3 pr-9 text-xs font-medium text-foreground shadow-sm transition-colors focus:border-primary/70 focus:outline-none focus:ring-2 focus:ring-primary/20;
+    background-color: #0f1115;
     color-scheme: dark;
     background-image: linear-gradient(45deg, transparent 50%, hsl(var(--muted-foreground)) 50%),
       linear-gradient(135deg, hsl(var(--muted-foreground)) 50%, transparent 50%);
@@ -158,7 +159,8 @@
   }
 
   .djhub-select:hover {
-    @apply border-border bg-background;
+    @apply border-border;
+    background-color: #11141a;
   }
 
   .djhub-select:disabled {
@@ -176,8 +178,7 @@
   }
 
   .glass {
-    background: hsl(220 18% 10% / 0.7);
-    backdrop-filter: blur(12px);
+    background: #171a20;
   }
 
   .premium-card,
@@ -186,17 +187,11 @@
   .auth-card {
     position: relative;
     overflow: hidden;
-    border: 1px solid rgb(255 255 255 / 0.08);
-    background:
-      linear-gradient(180deg, rgb(255 255 255 / 0.055), rgb(255 255 255 / 0.018)),
-      rgb(15 15 20 / 0.72);
-    backdrop-filter: blur(22px) saturate(135%);
-    -webkit-backdrop-filter: blur(22px) saturate(135%);
+    border: 1px solid rgb(255 255 255 / 0.05);
+    background: #171a20;
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.10),
-      inset 0 -1px 0 rgb(255 255 255 / 0.025),
-      0 20px 55px rgb(0 0 0 / 0.42),
-      0 0 0 1px rgb(0 0 0 / 0.20);
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 14px 30px rgb(0 0 0 / 0.28);
   }
 
   .premium-card::before,
@@ -207,10 +202,8 @@
     pointer-events: none;
     position: absolute;
     inset: 0;
-    background:
-      radial-gradient(circle at 18% 0%, rgb(255 255 255 / 0.095), transparent 34%),
-      linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 38%);
-    opacity: 0.9;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 32%);
+    opacity: 0.55;
   }
 
   .premium-card > :not(.absolute),
@@ -229,16 +222,17 @@
   }
 
   .premium-card {
-    @apply rounded-2xl transition-[transform,box-shadow,border-color] duration-300 ease-out;
+    @apply rounded-2xl transition-[transform,filter,box-shadow,border-color,background-color] duration-300 ease-out;
   }
 
   .premium-card:hover {
-    transform: translateY(-4px);
-    border-color: rgb(255 255 255 / 0.14);
+    transform: translateY(-2px);
+    filter: brightness(1.04);
+    border-color: rgb(255 255 255 / 0.10);
+    background: #1c2027;
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.13),
-      0 26px 70px rgb(0 0 0 / 0.52),
-      0 0 34px hsl(0 84% 58% / 0.12);
+      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      0 18px 36px rgb(0 0 0 / 0.36);
   }
 
   .premium-surface {
@@ -247,58 +241,63 @@
 
   .premium-row {
     @apply rounded-xl transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out;
-    background:
-      linear-gradient(180deg, rgb(255 255 255 / 0.045), rgb(255 255 255 / 0.015)),
-      rgb(15 15 20 / 0.62);
+    background: #0f1115;
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.08),
-      0 10px 24px rgb(0 0 0 / 0.24);
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 8px 18px rgb(0 0 0 / 0.20);
   }
 
   .premium-row:hover {
     transform: translateY(-2px);
-    border-color: rgb(255 255 255 / 0.14);
+    border-color: rgb(255 255 255 / 0.10);
+    background: #1c2027;
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.10),
-      0 18px 38px rgb(0 0 0 / 0.36),
-      0 0 22px hsl(0 84% 58% / 0.08);
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 12px 24px rgb(0 0 0 / 0.28);
   }
 
   .premium-input {
     @apply w-full rounded-xl px-4 py-3 text-sm text-foreground transition-[border-color,box-shadow,background-color] placeholder:text-muted-foreground focus:outline-none;
-    border: 1px solid rgb(255 255 255 / 0.09);
-    background:
-      linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(255 255 255 / 0.012)),
-      rgb(8 9 13 / 0.72);
+    border: 1px solid rgb(255 255 255 / 0.06);
+    background: #0f1115;
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.06),
-      0 8px 22px rgb(0 0 0 / 0.22);
+      inset 0 1px 0 rgb(255 255 255 / 0.04),
+      0 6px 16px rgb(0 0 0 / 0.18);
     color-scheme: dark;
   }
 
   .premium-input:hover {
     border-color: rgb(255 255 255 / 0.14);
-    background-color: rgb(10 11 16 / 0.82);
+    background: #1c2027;
   }
 
   .premium-input:focus {
     border-color: hsl(0 84% 58% / 0.68);
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
       0 0 0 3px hsl(0 84% 58% / 0.18),
-      0 12px 28px rgb(0 0 0 / 0.28);
+      0 10px 22px rgb(0 0 0 / 0.26);
   }
 
   .premium-chip {
-    @apply rounded-full px-2.5 py-1 text-[10px] font-medium text-foreground/85 backdrop-blur-xl transition-colors hover:text-foreground;
+    @apply rounded-full px-2.5 py-1 text-[10px] font-medium text-foreground/85 transition-colors hover:text-foreground;
     border: 1px solid rgb(255 255 255 / 0.10);
-    background: rgb(255 255 255 / 0.075);
+    background: #1c2027;
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
 
   .premium-chip:hover {
     border-color: hsl(0 84% 58% / 0.35);
     background: hsl(0 84% 58% / 0.09);
+  }
+
+  .carousel-scrollbar {
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .carousel-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   .auth-card {

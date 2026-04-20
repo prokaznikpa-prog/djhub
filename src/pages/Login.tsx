@@ -92,8 +92,8 @@ const Login = () => {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-20">
       <div className="auth-card max-w-sm space-y-6">
-        <Link to="/" className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Назад
+        <Link to="/" className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <ArrowLeft className="h-4 w-4 shrink-0" /> Назад
         </Link>
         <div className="text-center">
           <Link to="/" className="mb-2 inline-block text-3xl font-bold tracking-tight">
@@ -106,9 +106,9 @@ const Login = () => {
         <button
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border/60 bg-background/55 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-background disabled:opacity-50"
+          className="flex w-full min-w-0 items-center justify-center gap-3 rounded-lg border border-border/60 bg-background/55 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-background disabled:opacity-50"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24">
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
@@ -124,12 +124,12 @@ const Login = () => {
 
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input className={inputCls + " pl-9"} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" required />
+            <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 shrink-0 -translate-y-1/2 text-muted-foreground" />
+            <input className={inputCls + " !pl-14 pr-4"} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" required />
           </div>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input className={inputCls + " pl-9"} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+            <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 shrink-0 -translate-y-1/2 text-muted-foreground" />
+            <input className={inputCls + " !pl-14 pr-4"} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
           </div>
           <button
             type="button"
@@ -155,9 +155,9 @@ const Login = () => {
           <form onSubmit={handlePasswordResetRequest} className="profile-section space-y-3 rounded-xl border border-border/60 bg-background/45 p-3">
             <p className="text-xs text-muted-foreground">Укажите email, и мы отправим ссылку для восстановления пароля.</p>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 shrink-0 -translate-y-1/2 text-muted-foreground" />
               <input
-                className={inputCls + " pl-9"}
+                className={inputCls + " !pl-14 pr-4"}
                 type="email"
                 value={forgotEmail}
                 onChange={(e) => setForgotEmail(e.target.value)}

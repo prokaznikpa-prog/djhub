@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import VenueCard from "@/components/VenueCard";
+import CatalogCarousel from "@/components/CatalogCarousel";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import type { Tables } from "@/integrations/supabase/types";
@@ -55,15 +56,24 @@ const VenueCatalog = () => {
           <span className="text-primary neon-text">Заведения</span>
         </h1>
         {loading ? (
-          <p className="text-muted-foreground text-center py-12 text-sm">Загрузка...</p>
+          <CatalogCarousel
+            items={[] as Tables<"venue_profiles">[]}
+            loading
+            variant="venue"
+            getKey={(venue) => venue.id}
+            renderItem={() => null}
+          />
         ) : venues.length === 0 ? (
           <p className="text-muted-foreground text-center py-12 text-sm">Нет заведений</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {venues.map((venue, i) => (
-              <VenueCard key={venue.id} venue={venue} index={i} isAdmin={isAdmin} onDelete={handleDeleteVenue} />
-            ))}
-          </div>
+          <CatalogCarousel
+            items={venues}
+            variant="venue"
+            getKey={(venue) => venue.id}
+            renderItem={(venue, i, isActive) => (
+              <VenueCard venue={venue} index={i} isAdmin={isAdmin} isCarouselActive={isActive} onDelete={handleDeleteVenue} />
+            )}
+          />
         )}
       </div>
     </div>

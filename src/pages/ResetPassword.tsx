@@ -91,8 +91,8 @@ const ResetPassword = () => {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-20">
       <div className="auth-card max-w-sm space-y-6">
-        <Link to="/login" className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Назад
+        <Link to="/login" className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <ArrowLeft className="h-4 w-4 shrink-0" /> Назад
         </Link>
 
         <div className="text-center">
@@ -117,9 +117,9 @@ const ResetPassword = () => {
         ) : (
           <form onSubmit={handleUpdatePassword} className="space-y-4">
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 shrink-0 -translate-y-1/2 text-muted-foreground" />
               <input
-                className={inputCls + " pl-9"}
+                className={inputCls + " pl-11 pr-4"}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -129,9 +129,9 @@ const ResetPassword = () => {
               />
             </div>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 shrink-0 -translate-y-1/2 text-muted-foreground" />
               <input
-                className={inputCls + " pl-9"}
+                className={inputCls + " pl-11 pr-4"}
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}

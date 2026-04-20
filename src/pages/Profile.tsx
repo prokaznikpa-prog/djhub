@@ -70,12 +70,12 @@ const ProfileSummaryCard = ({ profile, children }: { profile: ProfileBase; child
   const avatar = getProfileAvatar(profile);
 
   return (
-    <div className="premium-surface p-4">
-      <div className="flex gap-4">
+    <div className="premium-surface p-5">
+      <div className="flex min-w-0 gap-4">
         <div className="flex-1 min-w-0 space-y-2">{children}</div>
         {avatar && (
           <div className="shrink-0">
-            <img src={avatar} alt={profile.name} className="h-28 w-28 rounded-2xl border border-border/60 object-cover shadow-xl shadow-black/25" />
+            <img src={avatar} alt={profile.name} className="h-24 w-24 rounded-2xl border border-white/5 object-cover shadow-lg sm:h-28 sm:w-28" />
           </div>
         )}
       </div>
@@ -101,8 +101,8 @@ const Profile = () => {
   const editButton = (
     <button 
     data-testid="profile-edit-button"
-    onClick={() => setShowEdit(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15">
-      <Pencil className="h-3.5 w-3.5" /> Редактировать
+    onClick={() => setShowEdit(true)} className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15">
+      <Pencil className="h-4 w-4 shrink-0" /> Редактировать
     </button>
   );
 
@@ -202,20 +202,20 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
   return (
     <ProfilePageShell editButton={editButton}>
         <ProfileSummaryCard profile={djProfile}>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-foreground truncate">{djProfile.name}</h2>
-                <span className="font-mono text-sm text-primary shrink-0">{djProfile.price}</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">{djProfile.name}</h2>
+                <span className="max-w-[45%] shrink-0 truncate font-mono text-sm text-primary">{djProfile.price}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <MapPin className="h-3.5 w-3.5" />{getCityLabel(djProfile.city)}
+              <div className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
+                <MapPin className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{getCityLabel(djProfile.city)}</span>
               </div>
               <ProfileStylePills profile={djProfile} />
               {djProfile.bio && <p className="text-xs text-secondary-foreground line-clamp-2">{djProfile.bio}</p>}
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground pt-1">
-                {djProfile.experience && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{getDjExperienceLabel(djProfile.experience)}</span>}
-                {djProfile.availability && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" /> {getDjAvailabilityLabel(djProfile.availability)}</span>}
-                <span className="flex items-center gap-1"><Handshake className="h-3 w-3" /> Коллаб: {djProfile.openToCollab ? "Да" : "Нет"}</span>
-                <span className="flex items-center gap-1"><Users className="h-3 w-3" /> Crew: {djProfile.openToCrew ? "Да" : "Нет"}</span>
+              <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 pt-1 text-xs text-gray-400">
+                {djProfile.experience && <span className="flex min-w-0 items-center gap-2"><Clock className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{getDjExperienceLabel(djProfile.experience)}</span></span>}
+                {djProfile.availability && <span className="flex min-w-0 items-center gap-2"><Briefcase className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{getDjAvailabilityLabel(djProfile.availability)}</span></span>}
+                <span className="flex min-w-0 items-center gap-2"><Handshake className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Коллаб: {djProfile.openToCollab ? "Да" : "Нет"}</span></span>
+                <span className="flex min-w-0 items-center gap-2"><Users className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Crew: {djProfile.openToCrew ? "Да" : "Нет"}</span></span>
               </div>
         </ProfileSummaryCard>
 
@@ -411,12 +411,12 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
   return (
     <ProfilePageShell editButton={editButton}>
         <ProfileSummaryCard profile={venueProfile}>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-foreground truncate">{venueProfile.name}</h2>
-                <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-xs font-medium text-secondary-foreground">{getVenueOptionLabel(venueProfile.type, VENUE_TYPE_OPTIONS)}</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-white">{venueProfile.name}</h2>
+                <span className="max-w-[45%] shrink-0 truncate rounded-full border border-white/5 bg-[#1c2027] px-2 py-0.5 text-xs font-medium text-gray-200">{getVenueOptionLabel(venueProfile.type, VENUE_TYPE_OPTIONS)}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-  <MapPin className="h-3.5 w-3.5" /> {getCityLabel(venueProfile.city)}
+              <div className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
+  <MapPin className="h-4 w-4 shrink-0" /> <span className="min-w-0 truncate">{getCityLabel(venueProfile.city)}</span>
 </div>
               {venueProfile.description && (
   <p className="text-xs text-secondary-foreground line-clamp-2">

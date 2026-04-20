@@ -120,45 +120,50 @@ const VenueProfile = () => {
 
   return (
     <div className="min-h-screen pb-12">
-      <section className="relative min-h-[520px] overflow-hidden pt-20">
-        <img src={heroImage} alt={venue.name} className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/65 to-background/15" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/85 via-background/30 to-transparent" />
+      <section className="container mx-auto max-w-6xl px-4 pt-24 sm:pt-28">
+        <div className="relative h-[280px] overflow-hidden rounded-2xl border border-white/5 bg-[#171a20] shadow-lg sm:h-[320px]">
+        <img src={heroImage} alt={venue.name} className="absolute inset-0 h-full w-full object-cover object-center" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0f1115] via-[#0f1115]/55 to-[#0f1115]/10" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0f1115]/85 via-[#0f1115]/28 to-transparent" />
 
-        <div className="container relative z-10 mx-auto flex min-h-[500px] max-w-6xl flex-col justify-end px-4 pb-10">
+        <div className="relative z-10 flex h-full flex-col justify-end p-5 sm:p-7">
           <Link
             to="/venues"
-            className="mb-auto inline-flex w-fit items-center gap-1.5 rounded-lg border border-white/10 bg-background/45 px-3 py-1.5 text-sm text-foreground/80 backdrop-blur-md transition-colors hover:text-foreground"
+            className="mb-auto inline-flex w-fit max-w-full items-center gap-2 rounded-lg border border-white/5 bg-[#171a20] px-3 py-1.5 text-sm text-gray-200 shadow-lg transition-colors hover:text-white"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Назад
+            <ArrowLeft className="h-4 w-4 shrink-0" />
+            <span>Назад</span>
           </Link>
 
-          <div className="profile-section max-w-3xl space-y-5">
+          <div className="max-w-3xl space-y-4">
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-foreground/80">
-                <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-primary" />{getCityLabel(venue.city)}</span>
-                {venue.address && <span>{venue.address}</span>}
-                <span className="inline-flex items-center gap-1.5">
-                  <Star className={`h-4 w-4 ${reviewData.count > 0 ? "fill-primary text-primary" : "text-foreground/45"}`} />
-                  {reviewData.count > 0 ? `${reviewData.averageRating.toFixed(1)} · ${reviewData.count} отзывов` : "Рейтинг появится скоро"}
+              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-gray-300">
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                  <span className="truncate">{getCityLabel(venue.city)}</span>
+                </span>
+                {venue.address && <span className="min-w-0 truncate">{venue.address}</span>}
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <Star className={`h-4 w-4 shrink-0 ${reviewData.count > 0 ? "fill-primary text-primary" : "text-foreground/45"}`} />
+                  <span className="truncate">{reviewData.count > 0 ? `${reviewData.averageRating.toFixed(1)} · ${reviewData.count} отзывов` : "Рейтинг появится скоро"}</span>
                 </span>
               </div>
-              <h1 className="text-4xl font-bold leading-tight text-foreground drop-shadow sm:text-6xl">{venue.name}</h1>
-              <div className="flex flex-wrap gap-2">
-                {venue.type && <span className="rounded-full border border-primary/25 bg-primary/15 px-3 py-1 text-xs font-semibold text-primary backdrop-blur-md">{venueTypeLabel}</span>}
+              <h1 className="line-clamp-2 break-words text-4xl font-bold leading-tight text-white drop-shadow sm:text-5xl">{venue.name}</h1>
+              <div className="flex min-w-0 flex-wrap gap-2">
+                {venue.type && <span className="max-w-full truncate rounded-full border border-primary/25 bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">{venueTypeLabel}</span>}
                 {venue.music_styles.map((style) => (
-                  <span key={style} className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold text-foreground/85 backdrop-blur-md">{style}</span>
+                  <span key={style} className="max-w-full truncate rounded-full border border-white/5 bg-[#1c2027] px-3 py-1 text-xs font-semibold text-gray-200">{style}</span>
                 ))}
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <a href="#venue-posts" className="inline-flex items-center gap-2 rounded-lg border border-primary/35 bg-background/50 px-5 py-2.5 text-sm font-semibold text-primary backdrop-blur-md transition-colors hover:bg-primary/10">
-                <ExternalLink className="h-4 w-4" /> Публикации
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <a href="#venue-posts" className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-primary/35 bg-[#171a20] px-5 py-2.5 text-sm font-semibold text-primary shadow-lg transition-colors hover:bg-[#1c2027]">
+                <ExternalLink className="h-4 w-4 shrink-0" /> <span>Публикации</span>
               </a>
             </div>
           </div>
+        </div>
         </div>
       </section>
 
@@ -173,7 +178,7 @@ const VenueProfile = () => {
           <section className="premium-surface profile-section p-6 [animation-delay:80ms]">
             <p className="text-xs font-semibold uppercase text-primary">Контакты</p>
             <div className="mt-4 space-y-3 text-sm text-secondary-foreground">
-              <p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" />{getCityLabel(venue.city)}{venue.address ? `, ${venue.address}` : ""}</p>
+              <p className="flex min-w-0 items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><span className="min-w-0 break-words">{getCityLabel(venue.city)}{venue.address ? `, ${venue.address}` : ""}</span></p>
             </div>
           </section>
 
@@ -181,17 +186,21 @@ const VenueProfile = () => {
             <p className="text-xs font-semibold uppercase text-primary">Оборудование</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {venue.equipment && (
-                <div className="premium-row p-4">
-                  <Disc className="mb-2 h-4 w-4 text-primary" />
-                  <p className="text-xs text-muted-foreground">Пульт и техника</p>
-                  <p className="text-sm font-semibold text-foreground">{venueEquipmentLabel}</p>
+                <div className="premium-row flex min-w-0 items-start gap-3 p-5">
+                  <Disc className="h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-400">Пульт и техника</p>
+                    <p className="truncate text-sm font-semibold text-gray-200">{venueEquipmentLabel}</p>
+                  </div>
                 </div>
               )}
               {venue.food_drinks && (
-                <div className="premium-row p-4">
-                  <Utensils className="mb-2 h-4 w-4 text-primary" />
-                  <p className="text-xs text-muted-foreground">Условия</p>
-                  <p className="text-sm font-semibold text-foreground">{venueConditionLabel}</p>
+                <div className="premium-row flex min-w-0 items-start gap-3 p-5">
+                  <Utensils className="h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-400">Условия</p>
+                    <p className="truncate text-sm font-semibold text-gray-200">{venueConditionLabel}</p>
+                  </div>
                 </div>
               )}
             </div>

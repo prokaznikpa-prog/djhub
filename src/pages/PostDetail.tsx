@@ -123,7 +123,7 @@ const PostDetail = () => {
 
             {venueName && <p className="text-sm text-muted-foreground">Площадка: <span className="font-semibold text-foreground">{venueName}</span></p>}
 
-            <div className="flex items-center gap-1.5 text-muted-foreground"><MapPin className="h-4 w-4" /> {getCityLabel(post.city)}</div>
+            <div className="flex min-w-0 items-center gap-2.5 text-muted-foreground"><MapPin className="h-4 w-4 shrink-0" /> <span className="min-w-0 truncate">{getCityLabel(post.city)}</span></div>
 
             <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4 text-sm">
               {post.event_date && <div className="premium-row p-3 text-muted-foreground"><Calendar className="mb-1 h-4 w-4 text-primary" /><span>{post.event_date}</span></div>}

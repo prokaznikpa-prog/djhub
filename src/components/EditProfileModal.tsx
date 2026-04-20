@@ -14,6 +14,8 @@ import {
   VENUE_EQUIPMENT_OPTIONS,
   VENUE_CONDITIONS_OPTIONS,
 } from "@/lib/venueOptions";
+import { getCachedValue, setCachedValue } from "@/lib/requestCache";
+import type { Tables } from "@/integrations/supabase/types";
 
 interface Props {
   type: "dj" | "venue";
@@ -26,6 +28,18 @@ interface Props {
 const TEXT_LIMIT = 200;
 const MAX_STYLES = 5;
 const digitsOnly = (value: string) => value.replace(/\D/g, "");
+
+const patchCachedProfile = <TProfile extends { id: string }>(cacheKey: string, profileKey: string, id: string, updates: Partial<TProfile>) => {
+  const currentProfile = getCachedValue<TProfile>(profileKey, { allowStale: true });
+  if (currentProfile) {
+    setCachedValue(profileKey, { ...currentProfile, ...updates });
+  }
+
+  const currentList = getCachedValue<TProfile[]>(cacheKey, { allowStale: true });
+  if (currentList) {
+    setCachedValue(cacheKey, currentList.map((item) => item.id === id ? { ...item, ...updates } : item));
+  }
+};
 
 const EditProfileModal = ({
   type,
@@ -164,7 +178,7 @@ const EditProfileModal = ({
           return;
         }
 
-        await updateDjProfile({
+        const updated = await updateDjProfile({
           name: djName.trim(),
           city: djCity,
           contact: djContact.trim(),
@@ -182,6 +196,23 @@ const EditProfileModal = ({
           openToCrew: djCrew,
           image: djPhoto || "",
         });
+        if (updated) {
+          patchCachedProfile<Tables<"dj_profiles">>("catalog:djs:active", `dj:${updated.id}`, updated.id, {
+            name: djName.trim(),
+            city: djCity,
+            contact: djContact.trim(),
+            styles: djStyles,
+            priority_style: djStyles[0] || null,
+            price: djPrice.trim(),
+            bio: djBio.trim() || null,
+            experience: djExperience || null,
+            played_at: djPlayedAt.split(",").map((item) => item.trim()).filter(Boolean),
+            availability: djAvailability || null,
+            open_to_collab: djCollab,
+            open_to_crew: djCrew,
+            image_url: djPhoto || null,
+          });
+        }
       } else {
         if (!vName.trim() || !vCity.trim()) {
           toast.error("Название и город обязательны");
@@ -198,7 +229,7 @@ const EditProfileModal = ({
           return;
         }
 
-        await updateVenueProfile({
+        const updated = await updateVenueProfile({
           name: vName.trim(),
           city: vCity,
           type: vType,
@@ -210,6 +241,20 @@ const EditProfileModal = ({
           music: vStyles,
           image: vPhoto || "",
         });
+        if (updated) {
+          patchCachedProfile<Tables<"venue_profiles">>("catalog:venues:active", `venue:${updated.id}`, updated.id, {
+            name: vName.trim(),
+            city: vCity,
+            type: vType,
+            contact: vContact.trim(),
+            description: vDesc.trim() || null,
+            address: vAddress.trim() || null,
+            equipment: vEquipment || null,
+            food_drinks: vConditions || null,
+            music_styles: vStyles,
+            image_url: vPhoto || null,
+          });
+        }
       }
 
       toast.success("Профиль обновлён");
@@ -225,15 +270,15 @@ const EditProfileModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/75 px-4 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/82 p-3 backdrop-blur-sm sm:p-6"
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="profile-section max-h-[85vh] w-full max-w-2xl overflow-y-auto premium-surface p-6"
+        className="profile-section premium-surface flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden p-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-6 flex items-start justify-between gap-4 border-b border-border/50 pb-4">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 px-5 py-4 sm:px-7 sm:py-5">
           <div>
             <p className="text-xs font-semibold uppercase text-primary">Профиль</p>
             <h2 className="mt-1 text-xl font-bold text-foreground">
@@ -250,10 +295,11 @@ const EditProfileModal = ({
           </button>
         </div>
 
-        <div className="space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:[&>*]:col-span-2">
           {type === "dj" ? (
             <>
-              <div>
+              <div className="lg:col-span-2">
                 <label className={labelCls}>DJ имя</label>
                 <input
                   className={inputCls}
@@ -266,21 +312,22 @@ const EditProfileModal = ({
               <div>
                 <label className={labelCls}>Фото</label>
 
-                <div className="flex items-center gap-3">
-                  <label className="group flex cursor-pointer items-center gap-3">
+                <div className="rounded-2xl border border-white/10 bg-[#0f1115] p-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="group flex min-w-0 cursor-pointer flex-wrap items-center gap-3">
                     {djPhoto ? (
                       <img
                         src={djPhoto}
                         alt="DJ preview"
-                        className="h-16 w-16 rounded-lg border border-border/60 bg-black object-cover shadow-lg shadow-black/20"
+                        className="h-20 w-20 rounded-xl border border-white/10 bg-black object-cover object-center shadow-lg shadow-black/20"
                       />
                     ) : (
-                      <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-border/70 bg-background/50 transition-colors group-hover:border-primary/40">
-                        <Upload className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-white/15 bg-background/70 transition-colors group-hover:border-primary/40">
+                        <Upload className="h-4 w-4 shrink-0 text-muted-foreground" />
                       </div>
                     )}
 
-                    <span className="text-xs text-muted-foreground">
+                    <span className="min-w-0 text-xs text-muted-foreground">
                       {djPhoto ? "Изменить фото" : "Загрузить фото"}
                     </span>
 
@@ -298,16 +345,17 @@ const EditProfileModal = ({
                     <button
                       type="button"
                       onClick={() => setDjPhoto(null)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/45 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+                      className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-background/70 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5 shrink-0" />
                       Удалить
                     </button>
                   )}
                 </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Город</label>
                   <select
@@ -355,7 +403,7 @@ const EditProfileModal = ({
                   </span>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 rounded-xl border border-border/40 bg-background/25 p-3">
+                <div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-[#0f1115] p-4">
                   {MUSIC_STYLES.map((style) => (
                     <button
                       key={style}
@@ -378,7 +426,7 @@ const EditProfileModal = ({
               <div>
                 <label className={labelCls}>Био</label>
                 <textarea
-                  className={inputCls + " h-16 resize-none"}
+                  className={inputCls + " min-h-24 resize-none"}
                   value={djBio}
                   maxLength={TEXT_LIMIT}
                   onChange={(e) =>
@@ -391,7 +439,7 @@ const EditProfileModal = ({
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Опыт</label>
                   <select
@@ -433,7 +481,7 @@ const EditProfileModal = ({
                 />
               </div>
 
-              <div className="flex gap-6">
+              <div className="flex flex-wrap gap-4 rounded-2xl border border-white/10 bg-[#0f1115] p-4">
                 <label className="flex cursor-pointer items-center gap-2 text-xs">
                   <input
                     type="checkbox"
@@ -457,35 +505,36 @@ const EditProfileModal = ({
             </>
           ) : (
             <>
-              <div>
+              <div className="lg:col-span-2">
                 <label className={labelCls}>Название</label>
                 <input
-  data-testid="venue-name-input"
-  className={inputCls}
-  value={vName}
-  onChange={(e) => setVName(e.target.value)}
-  placeholder="Название заведения"
-/>
+                  data-testid="venue-name-input"
+                  className={inputCls}
+                  value={vName}
+                  onChange={(e) => setVName(e.target.value)}
+                  placeholder="Название заведения"
+                />
               </div>
 
               <div>
                 <label className={labelCls}>Фото</label>
 
-                <div className="flex items-center gap-3">
-                  <label className="group flex cursor-pointer items-center gap-3">
+                <div className="rounded-2xl border border-white/10 bg-[#0f1115] p-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="group flex min-w-0 cursor-pointer flex-wrap items-center gap-3">
                     {vPhoto ? (
                       <img
                         src={vPhoto}
                         alt="Venue preview"
-                        className="h-16 w-16 rounded-lg border border-border/60 bg-black object-cover shadow-lg shadow-black/20"
+                        className="h-20 w-20 rounded-xl border border-white/10 bg-black object-cover object-center shadow-lg shadow-black/20"
                       />
                     ) : (
-                      <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-border/70 bg-background/50 transition-colors group-hover:border-primary/40">
-                        <Upload className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-white/15 bg-background/70 transition-colors group-hover:border-primary/40">
+                        <Upload className="h-4 w-4 shrink-0 text-muted-foreground" />
                       </div>
                     )}
 
-                    <span className="text-xs text-muted-foreground">
+                    <span className="min-w-0 text-xs text-muted-foreground">
                       {vPhoto ? "Изменить фото" : "Загрузить фото"}
                     </span>
 
@@ -503,16 +552,17 @@ const EditProfileModal = ({
                     <button
                       type="button"
                       onClick={() => setVPhoto(null)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-background/45 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+                      className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-background/70 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5 shrink-0" />
                       Удалить
                     </button>
                   )}
                 </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Город</label>
                   <select
@@ -559,7 +609,7 @@ const EditProfileModal = ({
               <div>
                 <label className={labelCls}>Описание</label>
                 <textarea
-                  className={inputCls + " h-16 resize-none"}
+                  className={inputCls + " min-h-24 resize-none"}
                   value={vDesc}
                   maxLength={TEXT_LIMIT}
                   onChange={(e) =>
@@ -582,7 +632,7 @@ const EditProfileModal = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Оборудование</label>
                   <select
@@ -622,7 +672,7 @@ const EditProfileModal = ({
                   </span>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 rounded-xl border border-border/40 bg-background/25 p-3">
+                <div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-[#0f1115] p-4">
                   {MUSIC_STYLES.map((style) => (
                     <button
                       key={style}
@@ -644,15 +694,19 @@ const EditProfileModal = ({
             </>
           )}
 
-          <button
-  data-testid="profile-save-button"
-  type="button"
-  onClick={handleSave}
-  disabled={saving}
-  className="btn-glow mt-2 w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
->
-  {saving ? "Сохранение..." : "Сохранить"}
-</button>
+          </div>
+        </div>
+
+        <div className="shrink-0 border-t border-white/10 bg-[#171a20] px-5 py-4 sm:px-7">
+            <button
+              data-testid="profile-save-button"
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="btn-glow w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? "Сохранение..." : "Сохранить"}
+            </button>
         </div>
       </div>
     </div>
