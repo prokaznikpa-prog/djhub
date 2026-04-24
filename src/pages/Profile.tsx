@@ -3,12 +3,21 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { getDjExperienceLabel } from "@/lib/djOptions";
 import {
-  useApplicationsForDj, useApplicationsForVenue, useInvitationsForDj, useInvitationsForVenue,
-  useVenuePostsByVenue, updateApplicationStatus,
-  updateInvitationStatus, updateVenuePost, createNotification, getVenuePostEngagement,
-  getVenuePostSelection,
+  useApplicationsForDj, useApplicationsForVenue,
   hideApplicationForDj, hideApplicationForVenue, restoreApplicationForDj, restoreApplicationForVenue,
-} from "@/hooks/useMarketplace";
+  updateApplicationStatus,
+} from "@/domains/applications/applications.hooks";
+import {
+  useInvitationsForDj, useInvitationsForVenue,
+  updateInvitationStatus,
+} from "@/domains/invitations/invitations.hooks";
+import {
+  getVenuePostEngagement,
+  getVenuePostSelection,
+  updateVenuePost,
+  useVenuePostsByVenue,
+} from "@/domains/posts/posts.hooks";
+import { createNotification } from "@/domains/notifications/notifications.hooks";
 import EditProfileModal from "@/components/EditProfileModal";
 import { getDjAvailabilityLabel } from "@/lib/djOptions";
 import CreatePostModal from "@/components/CreatePostModal";
@@ -33,6 +42,12 @@ import {
   
 } from "@/lib/venueOptions";
 type EditButton = ReactNode;
+
+const notifyInBackground = (task: Promise<unknown>) => {
+  void task.catch((error) => {
+    console.error("Background notification failed", error);
+  });
+};
 
 const ApplicationVisibilityTabs = ({ value, onChange }: { value: ApplicationVisibility; onChange: (value: ApplicationVisibility) => void }) => (
   <div className="premium-surface inline-flex p-0.5">
@@ -142,31 +157,40 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
   const [appVisibility, setAppVisibility] = useState<ApplicationVisibility>("active");
   const { apps: supaApps, loading: appsLoading, hideLocal: hideDjAppLocal, updateStatusLocal: updateDjAppStatusLocal } = useApplicationsForDj(djProfile.id, appVisibility);
   const { invites, updateLocal: updateInviteLocal } = useInvitationsForDj(djProfile.id);
+  const [pendingInviteAction, setPendingInviteAction] = useState<string | null>(null);
 
   const handleAcceptInvite = async (inv: any) => {
+    if (pendingInviteAction) return;
+    setPendingInviteAction(`accept:${inv.id}`);
     const { error } = await updateInvitationStatus(inv.id, "accepted");
     if (error) {
+      setPendingInviteAction(null);
       toast.error(error.message);
       return;
     }
-    if (inv.venue_profiles?.user_id) {
-      await createNotification(inv.venue_profiles.user_id, "status_update", `${djProfile.name} принял приглашение на "${inv.venue_posts?.title ?? ""}"`, inv.id);
-    }
-    toast.success("Приглашение принято");
     updateInviteLocal(inv.id, "accepted");
+    toast.success("Чат открыт");
+    setPendingInviteAction(null);
+    if (inv.venue_profiles?.user_id) {
+      notifyInBackground(createNotification(inv.venue_profiles.user_id, "status_update", `${djProfile.name} принял приглашение на "${inv.venue_posts?.title ?? ""}"`, inv.id));
+    }
   };
 
   const handleRejectInvite = async (inv: any) => {
+    if (pendingInviteAction) return;
+    setPendingInviteAction(`reject:${inv.id}`);
     const { error } = await updateInvitationStatus(inv.id, "rejected");
     if (error) {
+      setPendingInviteAction(null);
       toast.error(error.message);
       return;
     }
-    if (inv.venue_profiles?.user_id) {
-      await createNotification(inv.venue_profiles.user_id, "status_update", `${djProfile.name} отклонил приглашение на "${inv.venue_posts?.title ?? ""}"`, inv.id);
-    }
-    toast.success("Приглашение отклонено");
     updateInviteLocal(inv.id, "rejected");
+    toast.success("Приглашение отклонено");
+    setPendingInviteAction(null);
+    if (inv.venue_profiles?.user_id) {
+      notifyInBackground(createNotification(inv.venue_profiles.user_id, "status_update", `${djProfile.name} отклонил приглашение на "${inv.venue_posts?.title ?? ""}"`, inv.id));
+    }
   };
 
   const handleCancelApp = async (id: string) => {
@@ -238,7 +262,7 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
                   <div className="min-w-0">
                     <span className="text-sm font-semibold truncate block">{a.venue_posts?.title ?? "Публикация"}</span>
                     <div className="text-[10px] text-muted-foreground">
-                      {a.venue_posts?.venue_profiles?.name ?? ""} · {getGigTypeLabel(a.venue_posts?.post_type)}
+                      {a.venue_posts?.venue_profiles?.name ?? ""} В· {getGigTypeLabel(a.venue_posts?.post_type)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -285,10 +309,8 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
                     <span className={`text-[10px] font-mono ${getApplicationStatusClass(inv.status)}`}>{getApplicationStatusLabel(inv.status)}</span>
                     {inv.status === "new" && (
                       <>
-                        <button onClick={() => handleAcceptInvite(inv)} className="p-1 rounded hover:bg-primary/10 transition-colors" title="Принять">
-                          <Check className="h-3.5 w-3.5 text-primary" />
-                        </button>
-                        <button onClick={() => handleRejectInvite(inv)} className="p-1 rounded hover:bg-destructive/10 transition-colors" title="Отклонить">
+                        <button disabled={pendingInviteAction === `accept:${inv.id}` || pendingInviteAction === `reject:${inv.id}`} onClick={() => handleAcceptInvite(inv)} className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50">{pendingInviteAction === `accept:${inv.id}` ? "Открываем..." : "Связаться"}</button>
+                        <button disabled={pendingInviteAction === `accept:${inv.id}` || pendingInviteAction === `reject:${inv.id}`} onClick={() => handleRejectInvite(inv)} className="p-1 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50" title="Отклонить">
                           <XIcon className="h-3.5 w-3.5 text-destructive" />
                         </button>
                       </>
@@ -308,9 +330,10 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
 // ---- Venue Section ----
 const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, showCreatePost, setShowCreatePost, refresh }: { venueProfile: VenueProfile; editButton: EditButton; showEdit: boolean; setShowEdit: (value: boolean) => void; showCreatePost: boolean; setShowCreatePost: (value: boolean) => void; refresh: () => void | Promise<void> }) => {
   const [appVisibility, setAppVisibility] = useState<ApplicationVisibility>("active");
-  const { posts: myPosts, refetch: refetchPosts, addPost, updatePost } = useVenuePostsByVenue(venueProfile.id);
+  const { posts: myPosts, loading: postsLoading, refetch: refetchPosts, addPost, updatePost } = useVenuePostsByVenue(venueProfile.id);
   const { apps: venueApps, loading: appsLoading, hideLocal: hideVenueAppLocal, updateStatusLocal: updateVenueAppStatusLocal } = useApplicationsForVenue(venueProfile.id, appVisibility);
   const { invites: venueInvites } = useInvitationsForVenue(venueProfile.id);
+  const [pendingAppAction, setPendingAppAction] = useState<string | null>(null);
   const [engagedPostIds, setEngagedPostIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
@@ -363,29 +386,37 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
   };
 
   const handleAcceptApp = async (app: any) => {
+    if (pendingAppAction) return;
+    setPendingAppAction(`accept:${app.id}`);
     const { error } = await updateApplicationStatus(app.id, "accepted");
     if (error) {
-      toast.error("Не удалось принять отклик");
+      setPendingAppAction(null);
+      toast.error("Не удалось открыть чат");
       return;
     }
     updateVenueAppStatusLocal(app.id, "accepted");
+    toast.success("Чат открыт");
+    setPendingAppAction(null);
     if (app.dj_profiles?.user_id) {
-      await createNotification(app.dj_profiles.user_id, "status_update", `Ваш отклик на "${app.venue_posts?.title ?? ""}" принят!`, app.id);
+      notifyInBackground(createNotification(app.dj_profiles.user_id, "status_update", `Площадка хочет обсудить ваш отклик на "${app.venue_posts?.title ?? ""}"`, app.id));
     }
-    toast.success("Отклик принят");
   };
 
   const handleRejectApp = async (app: any) => {
+    if (pendingAppAction) return;
+    setPendingAppAction(`reject:${app.id}`);
     const { error } = await updateApplicationStatus(app.id, "rejected");
     if (error) {
+      setPendingAppAction(null);
       toast.error("Не удалось отклонить отклик");
       return;
     }
     updateVenueAppStatusLocal(app.id, "rejected");
-    if (app.dj_profiles?.user_id) {
-      await createNotification(app.dj_profiles.user_id, "status_update", `Ваш отклик на "${app.venue_posts?.title ?? ""}" отклонён`, app.id);
-    }
     toast.success("Отклик отклонён");
+    setPendingAppAction(null);
+    if (app.dj_profiles?.user_id) {
+      notifyInBackground(createNotification(app.dj_profiles.user_id, "status_update", `Ваш отклик на "${app.venue_posts?.title ?? ""}" отклонён`, app.id));
+    }
   };
 
   const handleHideVenueApp = async (id: string) => {
@@ -466,7 +497,13 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
               <Plus className="h-3 w-3" /> Создать
             </button>
           </div>
-          {myPosts.filter((post) => post.status === "open").length === 0 ? (
+          {postsLoading ? (
+            <div className="space-y-1">
+              {Array.from({ length: 2 }).map((_, index) => (
+                <div key={index} className="h-12 animate-pulse rounded-xl border border-white/5 bg-[#171a20]" />
+              ))}
+            </div>
+          ) : myPosts.filter((post) => post.status === "open").length === 0 ? (
             <p className="text-xs text-muted-foreground">У вас пока нет публикаций</p>
           ) : (
             <div className="max-h-[32vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[240px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
@@ -474,7 +511,7 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
                 <div key={p.id} className="premium-row flex items-center justify-between px-3 py-2.5">
                   <div className="min-w-0">
                     <span className="text-sm font-semibold truncate block">{p.title}</span>
-                    <div className="text-[10px] text-muted-foreground">{getGigTypeLabel(p.post_type)} · {p.budget || "—"}</div>
+                    <div className="text-[10px] text-muted-foreground">{getGigTypeLabel(p.post_type)} В· {p.budget || "—"}</div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <span className={`text-[10px] font-mono ${p.status === "open" ? "text-primary" : "text-muted-foreground"}`}>
@@ -519,8 +556,20 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
                     <span className={`text-[10px] font-mono ${getApplicationStatusClass(a.status)}`}>{getApplicationStatusLabel(a.status)}</span>
                     {appVisibility === "active" && (canVenueAcceptApplication(a) || canVenueRejectApplication(a)) && (
                       <>
-                        <button onClick={() => handleAcceptApp(a)} className="p-1 rounded hover:bg-primary/10 transition-colors"><Check className="h-3.5 w-3.5 text-primary" /></button>
-                        <button onClick={() => handleRejectApp(a)} className="p-1 rounded hover:bg-destructive/10 transition-colors"><XIcon className="h-3.5 w-3.5 text-destructive" /></button>
+                        <button
+                          disabled={pendingAppAction === `accept:${a.id}` || pendingAppAction === `reject:${a.id}`}
+                          onClick={() => handleAcceptApp(a)}
+                          className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
+                        >
+                          {pendingAppAction === `accept:${a.id}` ? "Открываем..." : "Связаться"}
+                        </button>
+                        <button
+                          disabled={pendingAppAction === `accept:${a.id}` || pendingAppAction === `reject:${a.id}`}
+                          onClick={() => handleRejectApp(a)}
+                          className="p-1 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                        >
+                          <XIcon className="h-3.5 w-3.5 text-destructive" />
+                        </button>
                       </>
                     )}
                     {appVisibility === "active" ? (
@@ -569,3 +618,4 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
 };
 
 export default Profile;
+

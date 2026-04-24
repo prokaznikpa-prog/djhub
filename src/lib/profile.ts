@@ -19,6 +19,8 @@ export interface ProfileBase {
   styles: string[];
   description: string;
   status?: string | null;
+  is_verified?: boolean | null;
+  is_trusted?: boolean | null;
 }
 
 export interface DjProfile extends ProfileBase {

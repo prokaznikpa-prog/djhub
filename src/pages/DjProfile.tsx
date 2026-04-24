@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useReviewsForProfile } from "@/hooks/useMarketplace";
+import { useReviewsForProfile } from "@/domains/reviews/reviews.hooks";
 import InviteDjModal from "@/components/InviteDjModal";
 import { MapPin, ExternalLink, ArrowLeft, Clock, Briefcase, Users, Handshake, Star, Heart, UserPlus } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
@@ -11,6 +11,7 @@ import { getDjAvailabilityLabel } from "@/lib/djOptions";
 import { getDjExperienceLabel } from "@/lib/djOptions";
 import { getCachedValue, setCachedValue } from "@/lib/requestCache";
 import { getDjImage } from "@/lib/image-fallback";
+import VerificationBadge, { getVerificationKind } from "@/components/VerificationBadge";
 const DjProfile = () => {
   const { id } = useParams();
   const { venueProfile } = useAuth();
@@ -55,11 +56,12 @@ const DjProfile = () => {
   }
 
   const heroImage = getDjImage(dj.name, dj.image_url);
+  const verificationKind = getVerificationKind(dj);
 
   return (
     <div className="min-h-screen pb-12">
       <section className="relative min-h-[clamp(430px,62vh,640px)] overflow-hidden pt-14">
-        <img src={heroImage} alt={dj.name} className="absolute inset-0 h-full w-full object-cover object-[center_30%]" />
+        <img src={heroImage} alt={dj.name} className="absolute inset-0 h-full w-full object-cover object-center" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/58 to-background/8" />
         <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/38 to-background/12" />
         <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-background to-transparent" />
@@ -81,7 +83,10 @@ const DjProfile = () => {
                   <span className="truncate">{reviewData.count > 0 ? `${reviewData.averageRating.toFixed(1)} · ${reviewData.count} отзывов` : "Рейтинг появится скоро"}</span>
                 </span>
               </div>
-              <h1 className="line-clamp-2 break-words text-4xl font-bold leading-tight text-white drop-shadow sm:text-5xl">{dj.name}</h1>
+              <div className="inline-flex max-w-full min-w-0 items-center gap-1.5 align-middle">
+                <h1 className="min-w-0 line-clamp-2 break-words text-4xl font-bold leading-tight text-white drop-shadow sm:text-5xl">{dj.name}</h1>
+                <VerificationBadge kind={verificationKind} className="h-[18px] w-[18px] text-[10px]" />
+              </div>
               <div className="flex min-w-0 flex-wrap gap-2">
                 {dj.styles.map((s) => (
                   <span key={s} className="max-w-full truncate rounded-full border border-white/5 bg-[#1c2027] px-3 py-1 text-xs font-semibold text-gray-200">{s}</span>

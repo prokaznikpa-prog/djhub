@@ -70,40 +70,40 @@ export type Database = {
       }
       bookings: {
         Row: {
-          application_id: string
+          application_id: string | null
           cancelled_at: string | null
           completed_at: string | null
           confirmed_at: string | null
           created_at: string
           dj_id: string
           id: string
-          post_id: string
+          post_id: string | null
           status: string
           updated_at: string
           venue_id: string
         }
         Insert: {
-          application_id: string
+          application_id?: string | null
           cancelled_at?: string | null
           completed_at?: string | null
           confirmed_at?: string | null
           created_at?: string
           dj_id: string
           id?: string
-          post_id: string
+          post_id?: string | null
           status?: string
           updated_at?: string
           venue_id: string
         }
         Update: {
-          application_id?: string
+          application_id?: string | null
           cancelled_at?: string | null
           completed_at?: string | null
           confirmed_at?: string | null
           created_at?: string
           dj_id?: string
           id?: string
-          post_id?: string
+          post_id?: string | null
           status?: string
           updated_at?: string
           venue_id?: string
@@ -132,6 +132,116 @@ export type Database = {
           },
           {
             foreignKeyName: "bookings_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venue_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          created_at: string
+          id: string
+          read_at: string | null
+          sender_id: string
+          text: string
+          thread_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          sender_id: string
+          text: string
+          thread_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          sender_id?: string
+          text?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_threads: {
+        Row: {
+          application_id: string | null
+          booking_id: string | null
+          created_at: string
+          dj_id: string
+          gig_id: string
+          hidden_by_dj: boolean
+          hidden_by_venue: boolean
+          id: string
+          updated_at: string
+          venue_id: string
+        }
+        Insert: {
+          application_id?: string | null
+          booking_id?: string | null
+          created_at?: string
+          dj_id: string
+          gig_id: string
+          hidden_by_dj?: boolean
+          hidden_by_venue?: boolean
+          id?: string
+          updated_at?: string
+          venue_id: string
+        }
+        Update: {
+          application_id?: string | null
+          booking_id?: string | null
+          created_at?: string
+          dj_id?: string
+          gig_id?: string
+          hidden_by_dj?: boolean
+          hidden_by_venue?: boolean
+          id?: string
+          updated_at?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_threads_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: true
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_threads_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_threads_dj_id_fkey"
+            columns: ["dj_id"]
+            isOneToOne: false
+            referencedRelation: "dj_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_threads_gig_id_fkey"
+            columns: ["gig_id"]
+            isOneToOne: false
+            referencedRelation: "venue_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_threads_venue_id_fkey"
             columns: ["venue_id"]
             isOneToOne: false
             referencedRelation: "venue_profiles"

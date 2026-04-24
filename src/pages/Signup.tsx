@@ -80,8 +80,8 @@ const Signup = () => {
   const inputCls = "premium-input";
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-20">
-      <div className="auth-card max-w-sm space-y-6">
+    <div className="flex min-h-screen items-start justify-center px-3 py-8 sm:items-center sm:px-4 sm:py-20">
+      <div className="auth-card w-full max-w-md space-y-5 sm:max-w-sm sm:space-y-6">
         <Link to="/" className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft className="h-4 w-4 shrink-0" /> Назад
         </Link>

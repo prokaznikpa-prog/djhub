@@ -1,14 +1,20 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+﻿import { Component, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useApplicationsForDj, useApplicationsForVenue,
+  updateApplicationStatus,
+  hideApplicationForDj, hideApplicationForVenue, restoreApplicationForDj, restoreApplicationForVenue,
+} from "@/domains/applications/applications.hooks";
+import {
   useInvitationsForDj, useInvitationsForVenue,
-  updateApplicationStatus, updateInvitationStatus, updateBookingStatus,
-  canUserLeaveBookingReview, createBookingReview, getReviewForBooking,
-  createNotification, hideApplicationForDj, hideApplicationForVenue, restoreApplicationForDj, restoreApplicationForVenue,
-} from "@/hooks/useMarketplace";
-import { hideChatThreadForParticipant, sendChatMessage, useChatMessages, useChatThreadPreviews, useChatThreads } from "@/hooks/useChat";
+  updateInvitationStatus,
+} from "@/domains/invitations/invitations.hooks";
+import { updateBookingStatus } from "@/domains/bookings/bookings.hooks";
+import { canUserLeaveBookingReview, createBookingReview, getReviewForBooking } from "@/domains/reviews/reviews.hooks";
+import { createNotification } from "@/domains/notifications/notifications.hooks";
+import { useChatMessages, useChatThreadPreviews, useChatThreads } from "@/hooks/useChatFlow";
+import { hideChatThreadForParticipant, resolveOtherParticipantLabel, resolveSenderLabel, sendChatMessage } from "@/lib/chatFlow";
 import { supabase } from "@/integrations/supabase/client";
 import { getGigTypeLabel } from "@/lib/gigs";
 import {
@@ -22,9 +28,11 @@ import {
 import { Check, X as XIcon, Send, Mail, Inbox as InboxIcon, MessageCircle, EyeOff, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
 import type { ChatMessage, ChatParticipant, ChatThread } from "@/lib/chat";
 import {
+  canCompleteBooking,
   canCancelBooking,
   canConfirmBooking,
   normalizeBookingStatus,
+  parseBookingEventDateTime,
   type BookingStatus,
 } from "@/lib/bookings";
 import { toast } from "sonner";
@@ -52,26 +60,107 @@ const BOOKING_STATUS_LABEL: Record<BookingStatus, string> = {
   completed: "Завершена",
   cancelled: "Отменена",
 };
-
 const BOOKING_ACTION_LABEL: Partial<Record<BookingStatus, string>> = {
   confirmed: "Подтвердить",
   completed: "Завершить бронь",
   cancelled: "Отменить",
 };
+const BOOKING_ACTION_PENDING_LABEL: Partial<Record<BookingStatus, string>> = {
+  confirmed: "Подтверждаем...",
+  completed: "Завершаем...",
+  cancelled: "Отменяем...",
+};
+const notifyInBackground = (task: Promise<unknown>) => {
+  void task.catch((error) => {
+    console.error("Background notification failed", error);
+  });
+};
+
+const formatThreadDate = (value?: string | null) => {
+  if (!value) return "";
+  const parsed = parseBookingEventDateTime(value, null);
+  return parsed && Number.isFinite(parsed.getTime()) ? parsed.toLocaleDateString("ru-RU") : value;
+};
+
+const formatThreadTime = (dateValue?: string | null, timeValue?: string | null) => {
+  const parsed = parseBookingEventDateTime(dateValue, timeValue);
+  if (!parsed) return timeValue ?? "";
+  return parsed.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+};
+
+const getThreadTimestamp = (value?: string | null, timeValue?: string | null) => {
+  const parsed = parseBookingEventDateTime(value, timeValue)?.getTime() ?? 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const hydrateThreadDisplay = (
+  thread: ChatThread,
+  metadata: Pick<ChatThread, "djName" | "venueName" | "gigTitle">,
+): ChatThread => ({
+  ...thread,
+  djName: thread.djName ?? metadata.djName ?? null,
+  venueName: thread.venueName ?? metadata.venueName ?? null,
+  gigTitle: thread.gigTitle ?? metadata.gigTitle ?? null,
+});
+
+class InboxSectionBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("Inbox section render failed", error);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <section className="premium-surface p-5 text-sm text-muted-foreground">Входящие остались доступны, но один из блоков не смог отрисоваться. Обновите страницу или попробуйте действие ещё раз.</section>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+class ChatPanelBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("Chat panel render failed", error);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="premium-surface min-w-0 p-5 text-sm text-muted-foreground">Не удалось открыть этот диалог. Список чатов остался доступен, попробуйте выбрать другой чат или обновить страницу.</div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const QUICK_REPLIES: Record<ChatParticipant["kind"], string[]> = {
   dj: ["Свободен в эту дату", "Какие условия?", "Готов сыграть"],
   venue: ["Какая цена?", "На сколько часов?", "Когда можете?"],
 };
-
 const BookingStatusControls = memo(({
   thread,
   participant,
   onUpdate,
+  onRefresh,
 }: {
   thread: ChatThread;
   participant: ChatParticipant;
   onUpdate: (threadId: string, updates: Partial<ChatThread>) => void;
+  onRefresh: (threadId: string) => Promise<ChatThread | null> | ChatThread | null;
 }) => {
   const [updating, setUpdating] = useState<BookingStatus | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -82,11 +171,17 @@ const BookingStatusControls = memo(({
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const status = normalizeBookingStatus(thread.bookingStatus);
   const isParticipant = thread.djId === participant.profileId || thread.venueId === participant.profileId;
-  const bookingForRules = { status, eventDate: thread.bookingEventDate };
+  const bookingForRules = {
+    status,
+    eventDate: thread.bookingEventDate,
+    eventTime: thread.bookingEventTime,
+    postType: thread.bookingPostType,
+  };
   const bookingForReview = { status, dj_id: thread.djId, venue_id: thread.venueId };
   const canReview = canUserLeaveBookingReview(bookingForReview, participant.profileId);
   const reviewTargetId = participant.profileId === thread.djId ? thread.venueId : thread.djId;
-  const canCompleteAsVenue = status === "confirmed" && participant.kind === "venue" && participant.profileId === thread.venueId;
+  const canConfirmAsVenue = participant.kind === "venue" && participant.profileId === thread.venueId && canConfirmBooking(bookingForRules);
+  const canCompleteAsVenue = participant.kind === "venue" && participant.profileId === thread.venueId && canCompleteBooking(bookingForRules);
   const actions: BookingStatus[] = [];
 
   useEffect(() => {
@@ -112,7 +207,7 @@ const BookingStatusControls = memo(({
   }, [thread.bookingId, participant.profileId, canReview]);
 
   if (!thread.bookingId || !isParticipant) return null;
-  if (canConfirmBooking(bookingForRules)) actions.push("confirmed");
+  if (canConfirmAsVenue) actions.push("confirmed");
   if (canCompleteAsVenue) actions.push("completed");
   if (canCancelBooking(bookingForRules)) actions.push("cancelled");
 
@@ -128,10 +223,13 @@ const BookingStatusControls = memo(({
     }
 
     onUpdate(thread.id, {
+      bookingId: data.id,
       bookingStatus: data.status,
       bookingCompletedAt: data.completed_at ?? thread.bookingCompletedAt ?? null,
+      updatedAt: new Date().toISOString(),
     });
-    toast.success(nextStatus === "completed" ? "Бронь завершена. Теперь можно оставить отзыв" : "Статус брони обновлён");
+    void onRefresh(thread.id);
+    toast.success(nextStatus === "completed" ? "Бронь завершена. Не забудьте оставить отзыв" : "Статус брони обновлён");
   };
 
   const handleReview = async () => {
@@ -148,7 +246,7 @@ const BookingStatusControls = memo(({
 
     if (error) {
       toast.error(error.message || "Не удалось сохранить отзыв");
-      if (error.message.includes("уже оставили")) {
+      if (error.message.includes("СѓР¶Рµ РѕСЃС‚Р°РІРёР»Рё")) {
         setReviewExists(true);
         setReviewOpen(false);
       }
@@ -168,7 +266,9 @@ const BookingStatusControls = memo(({
           {BOOKING_STATUS_LABEL[status]}
         </span>
         {thread.bookingEventDate && (
-          <span className="text-[10px] text-muted-foreground">{new Date(thread.bookingEventDate).toLocaleDateString("ru-RU")}</span>
+          <span className="text-[10px] text-muted-foreground">
+            {formatThreadDate(thread.bookingEventDate)}{thread.bookingEventTime ? ` в ${formatThreadTime(thread.bookingEventDate, thread.bookingEventTime)}` : ""}
+          </span>
         )}
         {actions.map((action) => (
           <button
@@ -178,7 +278,7 @@ const BookingStatusControls = memo(({
             disabled={!!updating}
             className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-foreground transition-colors hover:border-primary/30 hover:bg-primary/10 disabled:opacity-50"
           >
-            {updating === action ? "..." : BOOKING_ACTION_LABEL[action]}
+            {updating === action ? BOOKING_ACTION_PENDING_LABEL[action] : BOOKING_ACTION_LABEL[action]}
           </button>
         ))}
         {canReview && !reviewChecking && !reviewExists && !reviewOpen && (
@@ -229,12 +329,19 @@ const BookingStatusControls = memo(({
 
 const InboxPage = () => {
   const { user, djProfile, venueProfile, profilesLoading } = useAuth();
+  const [focusThreadId, setFocusThreadId] = useState<string | null>(null);
   const chatParticipant = useMemo<ChatParticipant | null>(() => {
     if (djProfile) return { profileId: djProfile.id, kind: "dj" };
     if (venueProfile) return { profileId: venueProfile.id, kind: "venue" };
     return null;
   }, [djProfile?.id, venueProfile?.id]);
   const chatThreads = useChatThreads(chatParticipant);
+  const handleChatThreadReady = useCallback((thread: ChatThread) => {
+    if (!thread?.id) return;
+    chatThreads.addThread(thread);
+    setFocusThreadId(thread.id);
+    void chatThreads.refreshThread(thread.id);
+  }, [chatThreads.addThread, chatThreads.refreshThread]);
 
   if (!user) {
     return (
@@ -253,16 +360,23 @@ const InboxPage = () => {
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <InboxIcon className="h-5 w-5 text-primary" /> Входящие
         </h1>
-        {djProfile && <DjInbox djProfile={djProfile} userId={user.id} onChatThreadReady={chatThreads.addThread} />}
-        {venueProfile && <VenueInbox venueProfile={venueProfile} userId={user.id} onChatThreadReady={chatThreads.addThread} />}
+        <InboxSectionBoundary>
+          {djProfile && <DjInbox djProfile={djProfile} userId={user.id} onChatThreadReady={handleChatThreadReady} />}
+          {venueProfile && <VenueInbox venueProfile={venueProfile} userId={user.id} onChatThreadReady={handleChatThreadReady} />}
+        </InboxSectionBoundary>
         {chatParticipant && (
-          <BookingChat
-            participant={chatParticipant}
-            threads={chatThreads.threads}
-            loading={chatThreads.loading}
-            removeThreadLocal={chatThreads.removeThreadLocal}
-            updateThreadLocal={chatThreads.updateThreadLocal}
-          />
+          <InboxSectionBoundary>
+            <BookingChat
+              participant={chatParticipant}
+              threads={chatThreads.threads}
+              loading={chatThreads.loading}
+              focusThreadId={focusThreadId}
+              onFocusedThread={() => setFocusThreadId(null)}
+              removeThreadLocal={chatThreads.removeThreadLocal}
+              updateThreadLocal={chatThreads.updateThreadLocal}
+              refreshThread={chatThreads.refreshThread}
+            />
+          </InboxSectionBoundary>
         )}
         {!djProfile && !venueProfile && profilesLoading && (
           <p className="text-sm text-muted-foreground text-center py-8">Загружаем профиль...</p>
@@ -279,31 +393,37 @@ const BookingChat = memo(({
   participant,
   threads,
   loading,
+  focusThreadId,
+  onFocusedThread,
   removeThreadLocal,
   updateThreadLocal,
+  refreshThread,
 }: {
   participant: ChatParticipant;
   threads: ChatThread[];
   loading: boolean;
+  focusThreadId: string | null;
+  onFocusedThread: () => void;
   removeThreadLocal: (threadId: string) => void;
   updateThreadLocal: (threadId: string, updates: Partial<ChatThread>) => void;
+  refreshThread: (threadId: string) => Promise<ChatThread | null> | ChatThread | null;
 }) => {
   const { previews, updatePreview } = useChatThreadPreviews(threads);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(() => typeof window === "undefined" ? true : window.innerWidth >= 768);
   const [unreadIds, setUnreadIds] = useState<Set<string>>(() => new Set());
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const previousListScrollTop = useRef(0);
   const previousPreviewIds = useRef<Record<string, string>>({});
   const visibleThreads = useMemo(() => {
     const byKey = new Map<string, ChatThread>();
-    threads.forEach((thread) => {
+    threads.filter((thread) => thread?.id).forEach((thread) => {
       byKey.set(thread.bookingId ?? thread.id, thread);
     });
     return Array.from(byKey.values()).sort((a, b) => {
-      const aTime = new Date(previews[a.id]?.createdAt ?? a.updatedAt).getTime();
-      const bTime = new Date(previews[b.id]?.createdAt ?? b.updatedAt).getTime();
+      const aTime = getThreadTimestamp(previews[a.id]?.createdAt ?? a.updatedAt);
+      const bTime = getThreadTimestamp(previews[b.id]?.createdAt ?? b.updatedAt);
       return bTime - aTime;
     });
   }, [threads, previews]);
@@ -315,6 +435,23 @@ const BookingChat = memo(({
       setSelectedId(visibleThreads[0]?.id ?? null);
     }
   }, [visibleThreads, selectedId]);
+
+  useEffect(() => {
+    if (!focusThreadId) return;
+    const targetThread = visibleThreads.find((thread) => thread.id === focusThreadId);
+    if (!targetThread) return;
+
+    setSelectedId(targetThread.id);
+    setPanelOpen(true);
+    setCollapsed(false);
+    setUnreadIds((current) => {
+      if (!current.has(targetThread.id)) return current;
+      const next = new Set(current);
+      next.delete(targetThread.id);
+      return next;
+    });
+    onFocusedThread();
+  }, [focusThreadId, visibleThreads, onFocusedThread]);
 
   useEffect(() => {
     const previous = previousPreviewIds.current;
@@ -341,6 +478,17 @@ const BookingChat = memo(({
     });
   }, [selectedId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setPanelOpen(true);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   useLayoutEffect(() => {
     if (!listScrollRef.current) return;
     listScrollRef.current.scrollTop = previousListScrollTop.current;
@@ -349,7 +497,7 @@ const BookingChat = memo(({
   const handleHideThread = useCallback(async (thread: ChatThread) => {
     const { error } = await hideChatThreadForParticipant(thread, participant);
     if (error) {
-      toast.error("Не удалось убрать чат из списка");
+      toast.error("Не удалось скрыть чат из входящих");
       return;
     }
 
@@ -361,7 +509,7 @@ const BookingChat = memo(({
       next.delete(thread.id);
       return next;
     });
-    toast.success("Чат убран только у вас");
+    toast.success("Чат скрыт");
   }, [participant, removeThreadLocal, updatePreview]);
 
   return (
@@ -369,9 +517,9 @@ const BookingChat = memo(({
       <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">
         <div>
           <h2 className="text-lg font-bold flex items-center gap-2">
-            <MessageCircle className="h-4 w-4 text-primary" /> Переговоры по заявкам
+            <MessageCircle className="h-4 w-4 text-primary" /> Чаты по бронированию
           </h2>
-          <p className="text-[10px] text-muted-foreground">Личные чаты DJ и площадки по конкретным откликам</p>
+          <p className="text-[10px] text-muted-foreground">Выбирайте чат с DJ и обсуждайте детали напрямую</p>
         </div>
         <button
           type="button"
@@ -385,26 +533,26 @@ const BookingChat = memo(({
       {collapsed ? null : (
       <div className="p-3">
       {loading ? (
-        <p className="text-sm text-muted-foreground">Загрузка чатов...</p>
+        <p className="text-sm text-muted-foreground">Загружаем чаты...</p>
       ) : visibleThreads.length === 0 ? (
-        <p className="text-sm text-muted-foreground">У вас пока нет диалогов</p>
+        <p className="text-sm text-muted-foreground">У вас пока нет активных чатов</p>
       ) : (
-        <div className={`grid gap-3 ${panelOpen ? "md:grid-cols-[260px_1fr]" : ""}`}>
-          <div className="premium-surface overflow-hidden">
+        <div className={`grid gap-3 ${panelOpen ? "md:grid-cols-[280px_minmax(0,1fr)]" : ""}`}>
+          <div className={`premium-surface overflow-hidden ${selectedThread && panelOpen ? "hidden md:block" : "block"}`}>
             <div className="border-b border-white/10 px-3 py-2">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Диалоги</p>
             </div>
             <div
               ref={listScrollRef}
               onScroll={(event) => { previousListScrollTop.current = event.currentTarget.scrollTop; }}
-              className="max-h-[452px] space-y-1 overflow-y-auto p-2 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+              className="max-h-[38dvh] space-y-1 overflow-y-auto p-2 md:max-h-[452px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
             >
               {visibleThreads.map((thread) => {
                 const preview = previews[thread.id];
-                const participantName = participant.kind === "dj" ? thread.venueName ?? "Заведение" : thread.djName ?? "DJ";
+                const participantName = resolveOtherParticipantLabel(thread, participant);
                 const isSelected = selectedThread?.id === thread.id && panelOpen;
                 const isUnread = unreadIds.has(thread.id);
-                const previewText = preview?.text ?? "Начните обсуждение деталей";
+                const previewText = preview?.text ?? "Напишите сообщение, чтобы начать диалог";
 
                 return (
                   <div
@@ -435,11 +583,11 @@ const BookingChat = memo(({
                         <span className="min-w-0 truncate text-sm font-semibold text-foreground">{participantName}</span>
                       </span>
                       <span className="shrink-0 text-[9px] text-muted-foreground/70">
-                        {new Date(preview?.createdAt ?? thread.updatedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                        {formatThreadTime(preview?.createdAt ?? thread.updatedAt)}
                       </span>
                     </span>
                     <span className="mt-0.5 block truncate text-[10px] font-medium text-primary/90">
-                      {thread.gigTitle ?? "Заявка"}{thread.bookingEventDate ? ` · ${new Date(thread.bookingEventDate).toLocaleDateString("ru-RU")}` : ""}
+                      {thread.gigTitle ?? "Публикация"}{thread.bookingEventDate ? ` · ${formatThreadDate(thread.bookingEventDate)}` : ""}
                     </span>
                     <span className="mt-1 block truncate text-xs text-muted-foreground">{previewText}</span>
                     </button>
@@ -447,7 +595,7 @@ const BookingChat = memo(({
                       type="button"
                       onClick={() => handleHideThread(thread)}
                       className="shrink-0 rounded-lg px-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-                      title="Убрать чат из моего списка"
+                      title="Скрыть чат из входящих"
                     >
                       <EyeOff className="h-3.5 w-3.5" />
                     </button>
@@ -457,14 +605,19 @@ const BookingChat = memo(({
             </div>
           </div>
           {selectedThread && panelOpen && (
-            <ChatMessages
-              thread={selectedThread}
-              participant={participant}
-              onClose={() => setPanelOpen(false)}
-              currentPreview={previews[selectedThread.id]}
-              onPreview={updatePreview}
-              onBookingUpdate={updateThreadLocal}
-            />
+            <div className="min-w-0">
+              <ChatPanelBoundary key={selectedThread.id}>
+                <ChatMessages
+                  thread={selectedThread}
+                  participant={participant}
+                  onClose={() => setPanelOpen(false)}
+                  currentPreview={previews[selectedThread.id]}
+                  onPreview={updatePreview}
+                  onBookingUpdate={updateThreadLocal}
+                  onRefreshThread={refreshThread}
+                />
+              </ChatPanelBoundary>
+            </div>
           )}
         </div>
       )}
@@ -481,6 +634,7 @@ const ChatMessages = memo(({
   currentPreview,
   onPreview,
   onBookingUpdate,
+  onRefreshThread,
 }: {
   thread: ChatThread;
   participant: ChatParticipant;
@@ -488,16 +642,54 @@ const ChatMessages = memo(({
   currentPreview?: ChatMessage;
   onPreview: (threadId: string, message: ChatMessage | null) => void;
   onBookingUpdate: (threadId: string, updates: Partial<ChatThread>) => void;
+  onRefreshThread: (threadId: string) => Promise<ChatThread | null> | ChatThread | null;
 }) => {
-  const { messages, loading, appendMessage, replaceMessage, removeMessage } = useChatMessages(thread, participant);
+  const { user } = useAuth();
+  const { messages, loading, appendMessage, replaceMessage, removeMessage } = useChatMessages(thread, participant, user?.id ?? null);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const stickToBottomRef = useRef(true);
   const previousThreadId = useRef<string | null>(null);
-  const quickReplies = QUICK_REPLIES[participant.kind];
+  const visibleThreadIdRef = useRef<string | null>(null);
+  const quickReplies = participant.kind === "venue"
+    ? [...QUICK_REPLIES.venue, "Давайте обсудим детали мероприятия"]
+    : QUICK_REPLIES[participant.kind];
+  const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
+  const hiddenMessageCount = Math.max(0, messages.length - visibleMessages.length);
   const lastMessage = messages[messages.length - 1];
   const showResponseSpeedHint = !!lastMessage && Date.now() - new Date(lastMessage.createdAt).getTime() > 3 * 60 * 60 * 1000;
+
+  useEffect(() => {
+    setVisibleMessages((current) => {
+      if (visibleThreadIdRef.current !== thread.id) {
+        visibleThreadIdRef.current = thread.id;
+        return messages.slice(-30);
+      }
+
+      if (messages.length === 0) return [];
+      if (current.length === 0) return messages.slice(-30);
+
+      const allIds = new Set(messages.map((message) => message.id));
+      const currentIds = new Set(current.map((message) => message.id));
+      const hasReplacedOrRemovedMessage = current.some((message) => !allIds.has(message.id));
+
+      if (hasReplacedOrRemovedMessage) {
+        return messages.slice(-Math.min(messages.length, Math.max(30, current.length)));
+      }
+
+      const newMessages = messages.filter((message) => !currentIds.has(message.id));
+      return newMessages.length > 0 ? [...current, ...newMessages] : current;
+    });
+  }, [messages, thread.id]);
+
+  const showOlderMessages = useCallback(() => {
+    setVisibleMessages((current) => {
+      const nextCount = Math.min(messages.length, current.length + 30);
+      return messages.slice(-nextCount);
+    });
+  }, [messages]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -505,9 +697,13 @@ const ChatMessages = memo(({
     const threadChanged = previousThreadId.current !== thread.id;
     previousThreadId.current = thread.id;
     if (threadChanged || stickToBottomRef.current) {
-      node.scrollTo({ top: node.scrollHeight, behavior: threadChanged || messages.length <= 1 ? "auto" : "smooth" });
+      node.scrollTo({ top: node.scrollHeight, behavior: threadChanged || visibleMessages.length <= 1 ? "auto" : "smooth" });
     }
-  }, [messages.length, thread.id]);
+  }, [visibleMessages.length, thread.id]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [thread.id]);
 
   const handleSend = useCallback(async () => {
     if (sending) return;
@@ -546,14 +742,19 @@ const ChatMessages = memo(({
 
   return (
     <div className="premium-surface min-w-0 overflow-hidden">
-      <div className="flex items-start justify-between gap-3 border-b border-white/10 bg-white/5 px-4 py-3">
+      <div className="flex items-start justify-between gap-3 border-b border-white/10 bg-white/5 px-3 py-3 sm:px-4">
         <div className="min-w-0">
           <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-primary/90">Чат по бронированию</p>
-          <h3 className="mt-0.5 truncate text-sm font-semibold text-foreground">{thread.gigTitle ?? "Заявка"}</h3>
+          <h3 className="mt-0.5 truncate text-sm font-semibold text-foreground">{thread.gigTitle ?? "Публикация"}</h3>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            {thread.djName ?? "DJ"} &rarr; {thread.venueName ?? "Заведение"}
+            {thread.djName || "DJ..."} &rarr; {thread.venueName || "Заведение..."}
           </p>
-          <BookingStatusControls thread={thread} participant={participant} onUpdate={onBookingUpdate} />
+          <BookingStatusControls
+            thread={thread}
+            participant={participant}
+            onUpdate={onBookingUpdate}
+            onRefresh={onRefreshThread}
+          />
         </div>
         <button
           type="button"
@@ -568,27 +769,39 @@ const ChatMessages = memo(({
         ref={scrollRef}
         onScroll={(event) => {
           const node = event.currentTarget;
+          if (node.scrollTop < 24) {
+            showOlderMessages();
+          }
           stickToBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
         }}
-        className="max-h-[392px] min-h-64 overflow-y-auto bg-black/10 px-4 py-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+        className="max-h-[45dvh] min-h-[16rem] overflow-y-auto bg-black/10 px-3 py-3 sm:max-h-[392px] sm:min-h-64 sm:px-4 sm:py-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
       >
         {loading ? (
-          <p className="text-xs text-muted-foreground">Загрузка сообщений...</p>
+          <p className="text-xs text-muted-foreground">Загружаем сообщения...</p>
         ) : messages.length === 0 ? (
           <div className="premium-surface p-4 text-center">
-            <p className="text-sm font-medium text-foreground">Начните диалог — быстрые ответы повышают шанс сделки</p>
-            <p className="text-sm font-medium text-foreground">Обсудите детали бронирования</p>
-            <p className="mt-1 text-xs text-muted-foreground">Время, сет, условия и финальное подтверждение лучше держать в одном месте.</p>
+            <p className="text-sm font-medium text-foreground">Диалог создан и готов к обсуждению деталей</p>
+            <p className="text-sm font-medium text-foreground">Напишите первое сообщение собеседнику</p>
+            <p className="mt-1 text-xs text-muted-foreground">Дата, время, условия и все подробности удобно согласовать прямо в чате.</p>
           </div>
         ) : (
           <div className="space-y-1 pr-1">
-          {messages.map((message, index) => {
+          {hiddenMessageCount > 0 && (
+            <button
+              type="button"
+              onClick={showOlderMessages}
+              className="mx-auto mb-3 block rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Показать более ранние сообщения
+            </button>
+          )}
+          {visibleMessages.map((message, index) => {
             const isMine = message.senderId === participant.profileId;
-            const previous = messages[index - 1];
-            const next = messages[index + 1];
+            const previous = visibleMessages[index - 1];
+            const next = visibleMessages[index + 1];
             const startsGroup = !previous || previous.senderId !== message.senderId;
             const endsGroup = !next || next.senderId !== message.senderId;
-            const senderName = message.senderId === thread.djId ? thread.djName ?? "DJ" : thread.venueName ?? "Заведение";
+            const senderName = resolveSenderLabel(thread, message.senderId);
 
             return (
               <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"} ${startsGroup ? "mt-3" : "mt-1"}`}>
@@ -603,9 +816,19 @@ const ChatMessages = memo(({
                   }`}>
                   <p className="whitespace-pre-wrap break-words">{message.text}</p>
                   {endsGroup && (
-                    <p className={`mt-1.5 text-right text-[9px] leading-none ${isMine ? "text-primary-foreground/65" : "text-muted-foreground/80"}`}>
-                      {new Date(message.createdAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-                    </p>
+                    <div className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] leading-none ${isMine ? "text-primary-foreground/65" : "text-muted-foreground/80"}`}>
+                      <span>{formatThreadTime(message.createdAt)}</span>
+                      {isMine && (
+                        message.readAt ? (
+                          <span className="inline-flex items-center">
+                            <Check className="h-3 w-3" strokeWidth={2.25} />
+                            <Check className="-ml-1.5 h-3 w-3" strokeWidth={2.25} />
+                          </span>
+                        ) : (
+                          <Check className="h-3 w-3" strokeWidth={2.25} />
+                        )
+                      )}
+                    </div>
                   )}
                   </div>
                 </div>
@@ -615,13 +838,16 @@ const ChatMessages = memo(({
           </div>
         )}
       </div>
-      <div className="border-t border-white/10 bg-white/5 p-3">
+      <div className="border-t border-white/10 bg-white/5 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mb-2 flex flex-wrap items-center gap-1.5">
           {quickReplies.map((reply) => (
             <button
               key={reply}
               type="button"
-              onClick={() => setText(reply)}
+              onClick={() => {
+                setText(reply);
+                inputRef.current?.focus();
+              }}
               className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10"
             >
               {reply}
@@ -629,10 +855,11 @@ const ChatMessages = memo(({
           ))}
         </div>
         {showResponseSpeedHint && (
-          <p className="mb-2 text-[10px] font-medium text-primary/80">Ответьте быстрее, чтобы не потерять сделку</p>
+          <p className="mb-2 text-[10px] font-medium text-primary/80">Подсказки рядом, текст не отправится сам</p>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
         <input
+          ref={inputRef}
           className="premium-input min-w-0 flex-1"
           value={text}
           maxLength={1000}
@@ -649,7 +876,7 @@ const ChatMessages = memo(({
           type="button"
           onClick={handleSend}
           disabled={sending || !text.trim()}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
         >
           <Send className="h-3.5 w-3.5" />
           Отправить
@@ -664,29 +891,41 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
   const { invites, updateLocal: updateInviteLocal } = useInvitationsForDj(djProfile.id);
   const [appVisibility, setAppVisibility] = useState<ApplicationVisibility>("active");
   const { apps, loading: appsLoading, hideLocal: hideDjAppLocal, updateStatusLocal: updateDjAppStatusLocal } = useApplicationsForDj(djProfile.id, appVisibility);
+  const [pendingInviteAction, setPendingInviteAction] = useState<string | null>(null);
 
   const handleAccept = async (inv: any) => {
+    if (pendingInviteAction) return;
+    setPendingInviteAction(`accept:${inv.id}`);
     const { error, chatThread } = await updateInvitationStatus(inv.id, "accepted");
     if (error) {
+      setPendingInviteAction(null);
       toast.error(error.message);
       return;
     }
-    // Notify venue
-    if (inv.venue_profiles?.user_id) {
-      await createNotification(inv.venue_profiles.user_id, "status_update", `${djProfile.name} принял приглашение на "${inv.venue_posts?.title ?? ""}"`, inv.id);
-    }
-    toast.success("Приглашение принято");
     updateInviteLocal(inv.id, "accepted");
-    if (chatThread) onChatThreadReady(chatThread);
+    if (chatThread) onChatThreadReady(hydrateThreadDisplay(chatThread, { djName: djProfile.name ?? null, venueName: inv.venue_profiles?.name ?? null, gigTitle: inv.venue_posts?.title ?? null }));
+    toast.success("Чат открыт");
+    setPendingInviteAction(null);
+    if (inv.venue_profiles?.user_id) {
+      notifyInBackground(createNotification(inv.venue_profiles.user_id, "status_update", `${djProfile.name} принял приглашение на "${inv.venue_posts?.title ?? ""}"`, inv.id));
+    }
   };
 
   const handleReject = async (inv: any) => {
-    await updateInvitationStatus(inv.id, "rejected");
-    if (inv.venue_profiles?.user_id) {
-      await createNotification(inv.venue_profiles.user_id, "status_update", `${djProfile.name} отклонил приглашение на "${inv.venue_posts?.title ?? ""}"`, inv.id);
+    if (pendingInviteAction) return;
+    setPendingInviteAction(`reject:${inv.id}`);
+    const { error } = await updateInvitationStatus(inv.id, "rejected");
+    if (error) {
+      setPendingInviteAction(null);
+      toast.error(error.message);
+      return;
     }
-    toast.success("Приглашение отклонено");
     updateInviteLocal(inv.id, "rejected");
+    toast.success("Приглашение отклонено");
+    setPendingInviteAction(null);
+    if (inv.venue_profiles?.user_id) {
+      notifyInBackground(createNotification(inv.venue_profiles.user_id, "status_update", `${djProfile.name} отклонил приглашение на "${inv.venue_posts?.title ?? ""}"`, inv.id));
+    }
   };
 
   const handleCancelApp = async (app: any) => {
@@ -731,9 +970,9 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
             {invites.map((inv) => (
               <div key={inv.id} className="premium-row flex items-center justify-between px-4 py-2.5">
                 <div className="min-w-0">
-                  <span className="text-sm font-semibold">{inv.venue_profiles?.name ?? "Площадка"}</span>
+                  <span className="text-sm font-semibold">{inv.venue_profiles?.name ?? "Заведение"}</span>
                   <div className="text-xs text-muted-foreground">
-                    {inv.venue_posts?.title ?? ""} · {getGigTypeLabel(inv.venue_posts?.post_type)}
+                    {inv.venue_posts?.title ?? ""} В· {getGigTypeLabel(inv.venue_posts?.post_type)}
                   </div>
                   {inv.message && <p className="text-[10px] text-muted-foreground/70 mt-0.5">"{inv.message}"</p>}
                 </div>
@@ -741,10 +980,8 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
                   <span className={`text-[10px] font-mono ${getApplicationStatusClass(inv.status)}`}>{getApplicationStatusLabel(inv.status)}</span>
                   {inv.status === "new" && (
                     <>
-                      <button onClick={() => handleAccept(inv)} className="p-1 rounded hover:bg-primary/10 transition-colors" title="Принять">
-                        <Check className="h-3.5 w-3.5 text-primary" />
-                      </button>
-                      <button onClick={() => handleReject(inv)} className="p-1 rounded hover:bg-destructive/10 transition-colors" title="Отклонить">
+                      <button disabled={pendingInviteAction === `accept:${inv.id}` || pendingInviteAction === `reject:${inv.id}`} onClick={() => handleAccept(inv)} className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50">{pendingInviteAction === `accept:${inv.id}` ? "Открываем..." : "Связаться"}</button>
+                      <button disabled={pendingInviteAction === `accept:${inv.id}` || pendingInviteAction === `reject:${inv.id}`} onClick={() => handleReject(inv)} className="p-1 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50" title="Отклонить">
                         <XIcon className="h-3.5 w-3.5 text-destructive" />
                       </button>
                     </>
@@ -765,7 +1002,7 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
         {appsLoading ? (
           <p className="text-sm text-muted-foreground">Загрузка откликов...</p>
         ) : apps.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{appVisibility === "active" ? "Вы ещё не откликались" : "Скрытых откликов нет"}</p>
+          <p className="text-sm text-muted-foreground">{appVisibility === "active" ? "Пока нет откликов" : "Скрытых откликов нет"}</p>
         ) : (
           <div className="max-h-[34vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[260px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
             {apps.map((a) => (
@@ -773,7 +1010,7 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
                 <div className="min-w-0">
                   <span className="text-sm font-semibold">{a.venue_posts?.title ?? "Публикация"}</span>
                   <div className="text-xs text-muted-foreground">
-                    {(a.venue_posts as any)?.venue_profiles?.name ?? ""} · {getGigTypeLabel(a.venue_posts?.post_type)} · {a.venue_posts?.event_date ? new Date(a.venue_posts.event_date).toLocaleDateString("ru-RU") : new Date(a.created_at).toLocaleDateString("ru-RU")}
+                    {(a.venue_posts as any)?.venue_profiles?.name ?? ""} В· {getGigTypeLabel(a.venue_posts?.post_type)} В· {a.venue_posts?.event_date ? new Date(a.venue_posts.event_date).toLocaleDateString("ru-RU") : new Date(a.created_at).toLocaleDateString("ru-RU")}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -792,7 +1029,7 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
                       <RotateCcw className="h-3.5 w-3.5 text-primary" />
                     </button>
                   )}
-                  {a.venue_posts && <Link to={`/post/${a.post_id}`} className="text-[10px] text-primary hover:underline">Открыть</Link>}
+                  {a.venue_posts && <Link to={`/post/${a.post_id}`} className="text-[10px] text-primary hover:underline">Профиль</Link>}
                 </div>
               </div>
             ))}
@@ -814,34 +1051,42 @@ const VenueInbox = ({
 }) => {
   const [appVisibility, setAppVisibility] = useState<ApplicationVisibility>("active");
   const { apps, loading: appsLoading, hideLocal: hideVenueAppLocal, updateStatusLocal: updateVenueAppStatusLocal } = useApplicationsForVenue(venueProfile.id, appVisibility);
-  const { invites, refetch: refetchInvites, updateLocal: updateVenueInviteLocal } = useInvitationsForVenue(venueProfile.id);
+  const { invites, updateLocal: updateVenueInviteLocal } = useInvitationsForVenue(venueProfile.id);
+  const [pendingAppAction, setPendingAppAction] = useState<string | null>(null);
 
   const handleAcceptApp = async (app: any) => {
+    if (pendingAppAction) return;
+    setPendingAppAction(`accept:${app.id}`);
     const { error, chatThread } = await updateApplicationStatus(app.id, "accepted");
     if (error) {
-      toast.error("Не удалось принять отклик");
+      setPendingAppAction(null);
+      toast.error("Не удалось открыть чат");
       return;
     }
     updateVenueAppStatusLocal(app.id, "accepted");
-    if (chatThread) onChatThreadReady(chatThread);
-    // Notify DJ
+    if (chatThread) onChatThreadReady(hydrateThreadDisplay(chatThread, { djName: app.dj_profiles?.name ?? null, venueName: venueProfile.name ?? null, gigTitle: app.venue_posts?.title ?? null }));
+    toast.success("Чат открыт");
+    setPendingAppAction(null);
     if (app.dj_profiles?.user_id) {
-      await createNotification(app.dj_profiles.user_id, "status_update", `Ваш отклик на "${app.venue_posts?.title ?? ""}" принят!`, app.id);
+      notifyInBackground(createNotification(app.dj_profiles.user_id, "status_update", `Ваш отклик на "${app.venue_posts?.title ?? ""}" принят`, app.id));
     }
-    toast.success("Отклик принят");
   };
 
   const handleRejectApp = async (app: any) => {
+    if (pendingAppAction) return;
+    setPendingAppAction(`reject:${app.id}`);
     const { error } = await updateApplicationStatus(app.id, "rejected");
     if (error) {
+      setPendingAppAction(null);
       toast.error("Не удалось отклонить отклик");
       return;
     }
     updateVenueAppStatusLocal(app.id, "rejected");
-    if (app.dj_profiles?.user_id) {
-      await createNotification(app.dj_profiles.user_id, "status_update", `Ваш отклик на "${app.venue_posts?.title ?? ""}" отклонён`, app.id);
-    }
     toast.success("Отклик отклонён");
+    setPendingAppAction(null);
+    if (app.dj_profiles?.user_id) {
+      notifyInBackground(createNotification(app.dj_profiles.user_id, "status_update", `Ваш отклик на "${app.venue_posts?.title ?? ""}" отклонён`, app.id));
+    }
   };
 
   const handleHideApp = async (app: any) => {
@@ -892,14 +1137,14 @@ const VenueInbox = ({
               <div key={a.id} className="premium-row flex items-center justify-between px-4 py-2.5">
                 <div className="min-w-0">
                   <span className="text-sm font-semibold">{a.dj_profiles?.name ?? "DJ"}</span>
-                  <div className="text-xs text-muted-foreground">{a.venue_posts?.title ?? ""} · {getGigTypeLabel(a.venue_posts?.post_type)}</div>
+                  <div className="text-xs text-muted-foreground">{a.venue_posts?.title ?? ""} В· {getGigTypeLabel(a.venue_posts?.post_type)}</div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className={`text-[10px] font-mono ${getApplicationStatusClass(a.status)}`}>{getApplicationStatusLabel(a.status)}</span>
                   {appVisibility === "active" && (canVenueAcceptApplication(a) || canVenueRejectApplication(a)) && (
                     <>
-                      <button onClick={() => handleAcceptApp(a)} className="p-1 rounded hover:bg-primary/10 transition-colors"><Check className="h-3.5 w-3.5 text-primary" /></button>
-                      <button onClick={() => handleRejectApp(a)} className="p-1 rounded hover:bg-destructive/10 transition-colors"><XIcon className="h-3.5 w-3.5 text-destructive" /></button>
+                      <button disabled={pendingAppAction === `accept:${a.id}` || pendingAppAction === `reject:${a.id}`} onClick={() => handleAcceptApp(a)} className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-50">{pendingAppAction === `accept:${a.id}` ? "Открываем..." : "Связаться"}</button>
+                      <button disabled={pendingAppAction === `accept:${a.id}` || pendingAppAction === `reject:${a.id}`} onClick={() => handleRejectApp(a)} className="p-1 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50"><XIcon className="h-3.5 w-3.5 text-destructive" /></button>
                     </>
                   )}
                   {appVisibility === "active" ? (
@@ -950,3 +1195,6 @@ const VenueInbox = ({
 };
 
 export default InboxPage;
+
+
+

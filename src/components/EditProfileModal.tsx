@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { MUSIC_STYLES } from "@/data/djhub-data";
-import { updateDjProfile, updateVenueProfile } from "@/data/store";
+import { updateDjProfile, updateVenueProfile } from "@/domains/profiles/profiles.hooks";
 import { X, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { DjProfile, VenueProfile } from "@/lib/profile";
@@ -16,6 +16,9 @@ import {
 } from "@/lib/venueOptions";
 import { getCachedValue, setCachedValue } from "@/lib/requestCache";
 import type { Tables } from "@/integrations/supabase/types";
+import PhotoCropModal from "@/components/PhotoCropModal";
+import { useAuth } from "@/hooks/useAuth";
+import { validateDjPrice, validateProfileName } from "@/lib/profileNameValidation";
 
 interface Props {
   type: "dj" | "venue";
@@ -27,17 +30,18 @@ interface Props {
 
 const TEXT_LIMIT = 200;
 const MAX_STYLES = 5;
+const PROFILE_CACHE_TTL = 90_000;
 const digitsOnly = (value: string) => value.replace(/\D/g, "");
 
 const patchCachedProfile = <TProfile extends { id: string }>(cacheKey: string, profileKey: string, id: string, updates: Partial<TProfile>) => {
   const currentProfile = getCachedValue<TProfile>(profileKey, { allowStale: true });
   if (currentProfile) {
-    setCachedValue(profileKey, { ...currentProfile, ...updates });
+    setCachedValue(profileKey, { ...currentProfile, ...updates }, PROFILE_CACHE_TTL);
   }
 
   const currentList = getCachedValue<TProfile[]>(cacheKey, { allowStale: true });
   if (currentList) {
-    setCachedValue(cacheKey, currentList.map((item) => item.id === id ? { ...item, ...updates } : item));
+    setCachedValue(cacheKey, currentList.map((item) => item.id === id ? { ...item, ...updates } : item), PROFILE_CACHE_TTL);
   }
 };
 
@@ -48,6 +52,7 @@ const EditProfileModal = ({
   onClose,
   onSaved,
 }: Props) => {
+  const { applyProfilePatch } = useAuth();
   const [saving, setSaving] = useState(false);
 
   const [djName, setDjName] = useState("");
@@ -73,6 +78,8 @@ const EditProfileModal = ({
   const [vConditions, setVConditions] = useState("");
   const [vStyles, setVStyles] = useState<string[]>([]);
   const [vPhoto, setVPhoto] = useState<string | null>(null);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<"dj" | "venue" | null>(null);
 
   useEffect(() => {
     if (type === "dj") {
@@ -105,12 +112,12 @@ const EditProfileModal = ({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !saving) onClose();
+      if (event.key === "Escape" && !saving && !cropImageSrc) onClose();
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, saving]);
+  }, [onClose, saving, cropImageSrc]);
 
   const inputCls =
     "premium-input";
@@ -124,7 +131,7 @@ const EditProfileModal = ({
 
   const handlePhoto = (
     file: File | null,
-    setter: (value: string | null) => void
+    target: "dj" | "venue"
   ) => {
     if (!file) return;
 
@@ -139,8 +146,23 @@ const EditProfileModal = ({
     }
 
     const reader = new FileReader();
-    reader.onload = () => setter(reader.result as string);
+    reader.onload = () => {
+      setCropTarget(target);
+      setCropImageSrc(reader.result as string);
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleCropSave = (croppedImage: string) => {
+    if (cropTarget === "dj") setDjPhoto(croppedImage);
+    if (cropTarget === "venue") setVPhoto(croppedImage);
+    setCropImageSrc(null);
+    setCropTarget(null);
+  };
+
+  const closeCropper = () => {
+    setCropImageSrc(null);
+    setCropTarget(null);
   };
 
   const toggleStyle = (
@@ -168,6 +190,12 @@ const EditProfileModal = ({
       setSaving(true);
 
       if (type === "dj") {
+        const djNameError = validateProfileName(djName);
+        if (djNameError) {
+          toast.error(djNameError);
+          return;
+        }
+
         if (!djName.trim() || !djCity.trim()) {
           toast.error("Имя и город обязательны");
           return;
@@ -175,6 +203,12 @@ const EditProfileModal = ({
 
         if (!djContact.trim()) {
           toast.error("Контакт обязателен");
+          return;
+        }
+
+        const djPriceError = validateDjPrice(djPrice);
+        if (djPriceError) {
+          toast.error(djPriceError);
           return;
         }
 
@@ -197,6 +231,7 @@ const EditProfileModal = ({
           image: djPhoto || "",
         });
         if (updated) {
+          applyProfilePatch("dj", updated);
           patchCachedProfile<Tables<"dj_profiles">>("catalog:djs:active", `dj:${updated.id}`, updated.id, {
             name: djName.trim(),
             city: djCity,
@@ -211,9 +246,16 @@ const EditProfileModal = ({
             open_to_collab: djCollab,
             open_to_crew: djCrew,
             image_url: djPhoto || null,
+            is_verified: updated.is_verified,
           });
         }
       } else {
+        const venueNameError = validateProfileName(vName);
+        if (venueNameError) {
+          toast.error(venueNameError);
+          return;
+        }
+
         if (!vName.trim() || !vCity.trim()) {
           toast.error("Название и город обязательны");
           return;
@@ -242,6 +284,7 @@ const EditProfileModal = ({
           image: vPhoto || "",
         });
         if (updated) {
+          applyProfilePatch("venue", updated);
           patchCachedProfile<Tables<"venue_profiles">>("catalog:venues:active", `venue:${updated.id}`, updated.id, {
             name: vName.trim(),
             city: vCity,
@@ -253,13 +296,14 @@ const EditProfileModal = ({
             food_drinks: vConditions || null,
             music_styles: vStyles,
             image_url: vPhoto || null,
+            is_verified: updated.is_verified,
           });
         }
       }
 
       toast.success("Профиль обновлён");
-      await onSaved();
       onClose();
+      void Promise.resolve(onSaved());
     } catch (error) {
       console.error(error);
       toast.error("Не удалось сохранить профиль");
@@ -270,15 +314,15 @@ const EditProfileModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/82 p-3 backdrop-blur-sm sm:p-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-background/82 p-0 backdrop-blur-sm sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="profile-section premium-surface flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden p-0"
+        className="profile-section premium-surface flex max-h-[100dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-[1.5rem] p-0 sm:max-h-[90vh] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 px-5 py-4 sm:px-7 sm:py-5">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-7 sm:py-5">
           <div>
             <p className="text-xs font-semibold uppercase text-primary">Профиль</p>
             <h2 className="mt-1 text-xl font-bold text-foreground">
@@ -295,7 +339,7 @@ const EditProfileModal = ({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-7 sm:py-5">
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:[&>*]:col-span-2">
           {type === "dj" ? (
             <>
@@ -336,7 +380,10 @@ const EditProfileModal = ({
                       accept="image/*"
                       className="hidden"
                       onChange={(e) =>
-                        handlePhoto(e.target.files?.[0] || null, setDjPhoto)
+                        {
+                          handlePhoto(e.target.files?.[0] || null, "dj");
+                          e.currentTarget.value = "";
+                        }
                       }
                     />
                   </label>
@@ -543,7 +590,10 @@ const EditProfileModal = ({
                       accept="image/*"
                       className="hidden"
                       onChange={(e) =>
-                        handlePhoto(e.target.files?.[0] || null, setVPhoto)
+                        {
+                          handlePhoto(e.target.files?.[0] || null, "venue");
+                          e.currentTarget.value = "";
+                        }
                       }
                     />
                   </label>
@@ -697,7 +747,7 @@ const EditProfileModal = ({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-white/10 bg-[#171a20] px-5 py-4 sm:px-7">
+        <div className="shrink-0 border-t border-white/10 bg-[#171a20] px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-7">
             <button
               data-testid="profile-save-button"
               type="button"
@@ -709,8 +759,18 @@ const EditProfileModal = ({
             </button>
         </div>
       </div>
+
+      {cropImageSrc && (
+        <PhotoCropModal
+          imageSrc={cropImageSrc}
+          onCancel={closeCropper}
+          onSave={handleCropSave}
+        />
+      )}
     </div>
   );
 };
 
 export default EditProfileModal;
+
+

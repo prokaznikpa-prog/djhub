@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams, Navigate, Link } from "react-router-dom";
 import { MUSIC_STYLES } from "@/data/djhub-data";
 import { toast } from "sonner";
@@ -18,6 +18,9 @@ import {
   getVenueOptionLabel,
 } from "@/lib/venueOptions";
 import { getCachedValue, setCachedValue } from "@/lib/requestCache";
+import { isDjProfileComplete, isVenueProfileComplete } from "@/domains/profiles/verification.rules";
+import { validateProfileName } from "@/lib/profileNameValidation";
+import PhotoCropModal from "@/components/PhotoCropModal";
 
 const TEXT_LIMIT = 200;
 const digitsOnly = (value: string) => value.replace(/\D/g, "");
@@ -117,6 +120,8 @@ const Register = () => {
   const [venuePhotoPreview, setVenuePhotoPreview] = useState<string | null>(null);
   const [previewDjs, setPreviewDjs] = useState<Tables<"dj_profiles">[]>([]);
   const [previewVenues, setPreviewVenues] = useState<Tables<"venue_profiles">[]>([]);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<"dj" | "venue" | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -157,7 +162,7 @@ const Register = () => {
     return <Navigate to="/djs" replace />;
   }
 
-  const handlePhotoChange = (file: File | null, setPreview: (s: string | null) => void) => {
+  const handlePhotoChange = (file: File | null, target: "dj" | "venue") => {
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
@@ -165,9 +170,29 @@ const Register = () => {
       return;
     }
 
+    if (!file.type.startsWith("image/")) {
+      toast.error("Нужен файл изображения");
+      return;
+    }
+
     const reader = new FileReader();
-    reader.onload = () => setPreview(reader.result as string);
+    reader.onload = () => {
+      setCropTarget(target);
+      setCropImageSrc(reader.result as string);
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleCropSave = (croppedImage: string) => {
+    if (cropTarget === "dj") setDjPhotoPreview(croppedImage);
+    if (cropTarget === "venue") setVenuePhotoPreview(croppedImage);
+    setCropImageSrc(null);
+    setCropTarget(null);
+  };
+
+  const closeCropper = () => {
+    setCropImageSrc(null);
+    setCropTarget(null);
   };
 
   const toggleStyle = (style: string, current: string[], setter: (v: string[]) => void) => {
@@ -179,14 +204,16 @@ const Register = () => {
     const newErrors: Record<string, string> = {};
 
     if (role === "dj") {
-      if (!djName.trim()) newErrors.djName = "Введите DJ имя";
+      const djNameError = validateProfileName(djName);
+      if (djNameError) newErrors.djName = djNameError;
       if (!djCity) newErrors.djCity = "Выберите город";
       if (!djContact.trim()) newErrors.djContact = "Введите контакт";
       if (djStyles.length === 0) newErrors.djStyles = "Выберите хотя бы один стиль";
       if (!djPrice.trim()) newErrors.djPrice = "Введите цену";
       if (djBio.length > TEXT_LIMIT) newErrors.djBio = "Био не должно превышать 200 символов";
     } else {
-      if (!venueName.trim()) newErrors.venueName = "Введите название";
+      const venueNameError = validateProfileName(venueName);
+      if (venueNameError) newErrors.venueName = venueNameError;
       if (!venueCity) newErrors.venueCity = "Выберите город";
       if (!venueType) newErrors.venueType = "Выберите тип";
       if (!venueContact.trim()) newErrors.venueContact = "Введите контакт";
@@ -205,27 +232,29 @@ const Register = () => {
 
     try {
       if (role === "dj") {
+        const djPayload = {
+          user_id: user!.id,
+          name: djName.trim(),
+          city: djCity,
+          contact: djContact.trim(),
+          styles: djStyles,
+          priority_style: djStyles[0] || null,
+          price: djPrice.trim(),
+          bio: djBio.trim() || null,
+          experience: djExperience || null,
+          played_at: djPlayedAt.split(",").map((s) => s.trim()).filter(Boolean),
+          availability: djAvailability || null,
+          format: null,
+          open_to_collab: djCollab,
+          open_to_crew: djCrew,
+          soundcloud: djSoundcloud.trim() || null,
+          instagram: djInstagram.trim() || null,
+          image_url: djPhotoPreview || null,
+        };
+
         const { data: supaRow, error: supaErr } = await supabase
           .from("dj_profiles")
-          .insert({
-            user_id: user!.id,
-            name: djName.trim(),
-            city: djCity,
-            contact: djContact.trim(),
-            styles: djStyles,
-            priority_style: djStyles[0] || null,
-            price: djPrice.trim(),
-            bio: djBio.trim() || null,
-            experience: djExperience || null,
-            played_at: djPlayedAt.split(",").map((s) => s.trim()).filter(Boolean),
-            availability: djAvailability || null,
-            format: null,
-            open_to_collab: djCollab,
-            open_to_crew: djCrew,
-            soundcloud: djSoundcloud.trim() || null,
-            instagram: djInstagram.trim() || null,
-            image_url: djPhotoPreview || null,
-          })
+          .insert({ ...djPayload, is_verified: isDjProfileComplete(djPayload) } as any)
           .select()
           .single();
 
@@ -236,21 +265,23 @@ const Register = () => {
         toast.success("Профиль DJ создан!");
         navigate("/djs");
       } else {
+        const venuePayload = {
+          user_id: user!.id,
+          name: venueName.trim(),
+          city: venueCity,
+          type: venueType,
+          contact: venueContact.trim(),
+          music_styles: venueStyles,
+          description: venueDesc.trim() || null,
+          equipment: venueEquipment || null,
+          address: venueAddress.trim() || null,
+          food_drinks: venueConditions || null,
+          image_url: venuePhotoPreview || null,
+        };
+
         const { data: supaRow, error: supaErr } = await supabase
           .from("venue_profiles")
-          .insert({
-            user_id: user!.id,
-            name: venueName.trim(),
-            city: venueCity,
-            type: venueType,
-            contact: venueContact.trim(),
-            music_styles: venueStyles,
-            description: venueDesc.trim() || null,
-            equipment: venueEquipment || null,
-            address: venueAddress.trim() || null,
-            food_drinks: venueConditions || null,
-            image_url: venuePhotoPreview || null,
-          })
+          .insert({ ...venuePayload, is_verified: isVenueProfileComplete(venuePayload) } as any)
           .select()
           .single();
 
@@ -340,7 +371,10 @@ const Register = () => {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => handlePhotoChange(e.target.files?.[0] || null, setDjPhotoPreview)}
+                        onChange={(e) => {
+                          handlePhotoChange(e.target.files?.[0] || null, "dj");
+                          e.currentTarget.value = "";
+                        }}
                       />
                     </label>
                   </div>
@@ -562,7 +596,10 @@ const Register = () => {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => handlePhotoChange(e.target.files?.[0] || null, setVenuePhotoPreview)}
+                        onChange={(e) => {
+                          handlePhotoChange(e.target.files?.[0] || null, "venue");
+                          e.currentTarget.value = "";
+                        }}
                       />
                     </label>
                   </div>
@@ -734,7 +771,7 @@ const Register = () => {
                 : previewVenues.map((v) => <PreviewVenueCard key={v.id} venue={v} />)}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">РђРєС‚РёРІРЅС‹Рµ РїСЂРѕС„РёР»Рё СЃРєРѕСЂРѕ РїРѕСЏРІСЏС‚СЃСЏ</p>
+            <p className="text-sm text-muted-foreground">Активные профили скоро появятся</p>
           )}
 
           <button
@@ -745,8 +782,18 @@ const Register = () => {
           </button>
         </div>
       </div>
+
+      {cropImageSrc && (
+        <PhotoCropModal
+          imageSrc={cropImageSrc}
+          onCancel={closeCropper}
+          onSave={handleCropSave}
+        />
+      )}
     </div>
   );
 };
 
 export default Register;
+
+

@@ -1,6 +1,6 @@
-import { memo, useState } from "react";
+﻿import { memo, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, ExternalLink, UserPlus, EyeOff } from "lucide-react";
+import { EyeOff, MapPin, UserPlus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import InviteDjModal from "@/components/InviteDjModal";
 import { getDjImage } from "@/lib/image-fallback";
@@ -9,6 +9,8 @@ import { formatPrice } from "@/lib/utils";
 import { getCityLabel } from "@/lib/geography";
 import { preloadRoute } from "@/lib/routePreload";
 import { setCachedValue } from "@/lib/requestCache";
+import VerificationBadge, { getVerificationKind } from "@/components/VerificationBadge";
+
 type DjProfileRow = Tables<"dj_profiles">;
 
 interface DjCardProps {
@@ -17,128 +19,123 @@ interface DjCardProps {
   isAdmin?: boolean;
   isBestMatch?: boolean;
   matchReasons?: string[];
-  isCarouselActive?: boolean;
   onDelete?: (id: string) => void | Promise<void>;
 }
 
-const DjCard = ({ dj, index = 0, isAdmin = false, isBestMatch = false, matchReasons = [], isCarouselActive = false, onDelete }: DjCardProps) => {
-  const [hovered, setHovered] = useState(false);
+const DjCard = ({ dj, isAdmin = false, isBestMatch = false, matchReasons = [], onDelete }: DjCardProps) => {
   const { venueProfile } = useAuth();
   const [showInvite, setShowInvite] = useState(false);
+  const verificationKind = getVerificationKind(dj);
 
-  const handleInvite = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleInvite = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
     setShowInvite(true);
   };
 
-  const handleDelete = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDelete = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
     onDelete?.(dj.id);
   };
 
   return (
     <>
-      <div
-        className={`premium-card group relative aspect-[3/4] overflow-hidden will-change-transform [content-visibility:auto] [contain-intrinsic-size:260px] ${
-          isCarouselActive ? "border-primary/35 shadow-[0_28px_70px_rgba(0,0,0,0.58)]" : ""
-        }`}
-        style={{ animationDelay: `${index * 60}ms` }}
+      <article
+        className="group relative flex h-[312px] w-full min-w-0 flex-col overflow-hidden rounded-[18px] border border-white/10 bg-white/5 shadow-[0_16px_34px_rgba(0,0,0,0.26)] backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-200 ease-out will-change-transform hover:-translate-y-1 hover:scale-[1.02] hover:border-white/15 hover:shadow-[0_20px_40px_rgba(0,0,0,0.34)] sm:h-[322px]"
         onMouseEnter={() => {
-          setHovered(true);
           preloadRoute(`/dj/${dj.id}`);
           setCachedValue(`dj:${dj.id}`, dj);
         }}
-        onMouseLeave={() => setHovered(false)}
       >
         <img
           src={getDjImage(dj.name, dj.image_url)}
           alt={dj.name}
           loading="lazy"
           decoding="async"
-          className={`absolute inset-0 h-full w-full object-cover object-[center_35%] transition-transform duration-500 ease-out ${
-            isCarouselActive ? "scale-[1.015] group-hover:scale-[1.035]" : "group-hover:scale-[1.02]"
-          }`}
+          className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-200 ease-out group-hover:scale-[1.02]"
         />
-        <div className={`absolute inset-0 bg-gradient-to-t ${
-          isCarouselActive
-            ? "from-[#050608] via-[#0f1115]/70 to-[#0f1115]/5"
-            : "from-[#0f1115] via-[#0f1115]/55 to-[#0f1115]/10"
-        }`} />
-        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#0f1115]/75 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
 
-        {(venueProfile || isAdmin) && (
-          <div className="absolute top-3 right-3 z-20 flex items-center gap-1">
-            {venueProfile && (
-              <button onClick={handleInvite} className="rounded-full border border-white/5 bg-[#171a20] p-1.5 shadow-lg transition-colors hover:bg-[#1c2027]">
-                <UserPlus className="h-4 w-4 shrink-0 text-primary" />
-              </button>
+        <div className="relative z-10 flex h-full min-h-0 flex-col justify-between p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex max-w-[70%] flex-wrap gap-1">
+            {isBestMatch && (
+              <span className="truncate rounded-full border border-white/10 bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-primary backdrop-blur-md">
+                🔥 Лучшее совпадение
+              </span>
             )}
-            {isAdmin && (
-              <button onClick={handleDelete} className="rounded-full border border-white/10 bg-background p-1.5 transition-colors hover:bg-[#1c2027]" title="Скрыть DJ из маркетплейса">
-                <EyeOff className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </button>
+            {matchReasons.slice(0, isBestMatch ? 1 : 2).map((reason) => (
+              <span key={reason} className="truncate rounded-full border border-white/10 bg-black/50 px-1.5 py-0.5 text-[9px] font-medium text-gray-200 backdrop-blur-md">
+                {reason}
+              </span>
+            ))}
+            </div>
+
+            {(venueProfile || isAdmin) && (
+              <div className="flex items-center gap-1">
+              {venueProfile && (
+                <button
+                  type="button"
+                  onClick={handleInvite}
+                  className="rounded-full border border-white/10 bg-black/45 p-1.5 text-primary shadow-sm backdrop-blur-sm transition-colors hover:bg-black/65"
+                  aria-label="Пригласить DJ"
+                >
+                  <UserPlus className="h-3.5 w-3.5 shrink-0" />
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="rounded-full border border-white/10 bg-black/45 p-1.5 text-gray-200 shadow-sm backdrop-blur-sm transition-colors hover:bg-black/65"
+                  aria-label="Скрыть DJ"
+                >
+                  <EyeOff className="h-3.5 w-3.5 shrink-0" />
+                </button>
+              )}
+              </div>
             )}
           </div>
-        )}
 
-        {(isBestMatch || matchReasons.length > 0) && (
-          <div className="absolute left-3 right-12 top-3 z-10 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] font-medium">
-            {isBestMatch && <span className="rounded-full border border-primary/25 bg-background px-2 py-0.5 text-primary shadow-sm">🔥 Лучшее совпадение</span>}
-            {matchReasons.slice(0, 2).map((reason) => (
-              <span key={reason} className="premium-chip max-w-full truncate px-2 py-0.5">{reason}</span>
-            ))}
-          </div>
-        )}
+          <div className="mt-auto flex min-h-0 flex-col gap-1.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="inline-flex max-w-full min-w-0 items-center gap-1.5 align-middle">
+                  <h3 className="min-w-0 truncate text-sm font-semibold leading-tight text-white">{dj.name}</h3>
+                  <VerificationBadge kind={verificationKind} className="translate-y-[0.5px]" />
+                </div>
+                <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-gray-300">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="min-w-0 truncate">{getCityLabel(dj.city)}</span>
+                </div>
+              </div>
+              <div className="price-pill shrink-0 shadow-[0_10px_22px_rgba(239,68,68,0.28)]">{formatPrice(dj.price)}</div>
+            </div>
 
-        <div className="pointer-events-none absolute inset-0 opacity-0" aria-hidden="true" />
+            <div className="flex min-w-0 flex-wrap gap-1">
+              {dj.styles.slice(0, 2).map((style) => (
+                <span key={style} className="max-w-full truncate rounded-full border border-white/10 bg-black/35 px-1.5 py-0.5 text-[9px] font-medium text-gray-100 backdrop-blur-sm">
+                  {style}
+                </span>
+              ))}
+            </div>
 
-        <div className="absolute inset-x-0 bottom-0 z-10 space-y-3 p-4">
-          <div className="flex min-w-0 items-end justify-between gap-2">
-            <h3 className={`min-w-0 flex-1 truncate font-semibold leading-tight text-white drop-shadow ${
-              isCarouselActive ? "text-xl" : "text-lg"
-            }`}>{dj.name}</h3>
-            <span className="max-w-[46%] shrink-0 truncate rounded-full border border-primary/25 bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">{formatPrice(dj.price)}</span>
-          </div>
-          <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-300">
-            <MapPin className="h-4 w-4 shrink-0 text-primary/80" />
-            <span className="min-w-0 truncate">{getCityLabel(dj.city)}</span>
-          </div>
-          <div className="flex min-w-0 flex-wrap gap-1.5">
-            {dj.styles.slice(0, 2).map((s) => (
-              <span key={s} className="max-w-full truncate rounded-full border border-white/5 bg-[#1c2027] px-2 py-0.5 text-[10px] font-medium text-gray-200">{s}</span>
-            ))}
-          </div>
-          {dj.bio && <p className="line-clamp-1 break-words text-[11px] leading-relaxed text-gray-400">{dj.bio}</p>}
-
-          <div
-            className={`flex gap-2 pt-1 transition-all duration-300 ease-out ${
-              hovered || isCarouselActive ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
-            } group-focus-within:translate-y-0 group-focus-within:opacity-100`}
-          >
+            <div className="pt-1.5">
             <Link
               to={`/dj/${dj.id}`}
               onFocus={() => {
                 preloadRoute(`/dj/${dj.id}`);
                 setCachedValue(`dj:${dj.id}`, dj);
               }}
-              className="min-w-0 flex-1 rounded-lg bg-primary py-2 text-center text-[10px] font-semibold text-primary-foreground shadow-lg transition-colors hover:bg-primary/90"
+              className="inline-flex h-9 items-center justify-center self-start rounded-lg bg-primary px-3.5 text-[10px] font-semibold text-primary-foreground shadow-[0_10px_22px_rgba(239,68,68,0.22)] transition-[transform,background-color,box-shadow] duration-200 hover:bg-primary/90 hover:shadow-[0_12px_26px_rgba(239,68,68,0.28)]"
             >
               Открыть профиль
             </Link>
-
-            <a
-              href={dj.contact}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex shrink-0 items-center justify-center rounded-lg border border-white/5 bg-[#171a20] px-3 py-2 text-[10px] font-medium text-gray-200 transition-colors hover:border-primary/40 hover:text-primary"
-            >
-              <ExternalLink className="h-4 w-4 shrink-0" />
-            </a>
+            </div>
           </div>
         </div>
-      </div>
+      </article>
 
       {showInvite && venueProfile && (
         <InviteDjModal venueId={venueProfile.id} djId={dj.id} djName={dj.name} onClose={() => setShowInvite(false)} />

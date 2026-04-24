@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { createInvitation, checkInvited, useVenuePostsByVenue, createNotification } from "@/hooks/useMarketplace";
+import { createInvitation, checkInvited } from "@/domains/invitations/invitations.hooks";
+import { createNotification } from "@/domains/notifications/notifications.hooks";
+import { useVenuePostsByVenue } from "@/domains/posts/posts.hooks";
 import { supabase } from "@/integrations/supabase/client";
 import { X } from "lucide-react";
 import { toast } from "sonner";
@@ -14,19 +16,11 @@ interface Props {
 
 const InviteDjModal = ({ venueId, djId, djName, onClose }: Props) => {
   const { user } = useAuth();
-  const { posts } = useVenuePostsByVenue(venueId);
+  const { posts, loading } = useVenuePostsByVenue(venueId);
   const activePosts = posts.filter((p) => p.status === "open");
   const [selectedPost, setSelectedPost] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (posts.length > 0 || loaded) return;
-    const timer = setTimeout(() => setLoaded(true), 800);
-    return () => clearTimeout(timer);
-  }, [posts, loaded]);
-
   const handleSubmit = async () => {
     if (!selectedPost) {
       toast.error("Выберите публикацию");
@@ -72,7 +66,7 @@ const InviteDjModal = ({ venueId, djId, djName, onClose }: Props) => {
           <button onClick={onClose} className="rounded-lg border border-white/10 bg-background/45 p-1.5 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"><X className="h-4 w-4" /></button>
         </div>
 
-        {!loaded && activePosts.length === 0 ? (
+        {loading ? (
           <p className="text-sm text-muted-foreground">Загрузка публикаций...</p>
         ) : activePosts.length === 0 ? (
           <p className="text-sm text-muted-foreground">У вас нет активных публикаций. Создайте публикацию чтобы отправлять приглашения.</p>

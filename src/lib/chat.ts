@@ -9,6 +9,8 @@ export interface ChatThread extends GigThreadAnchor {
   bookingStatus?: string | null;
   bookingCompletedAt?: string | null;
   bookingEventDate?: string | null;
+  bookingEventTime?: string | null;
+  bookingPostType?: string | null;
   hiddenByDj: boolean;
   hiddenByVenue: boolean;
   gigTitle?: string | null;
@@ -22,6 +24,7 @@ export interface ChatMessage {
   senderId: string;
   text: string;
   createdAt: string;
+  readAt?: string | null;
 }
 
 export interface ChatParticipant {
@@ -40,10 +43,10 @@ export interface ChatThreadRow {
   updated_at: string;
   hidden_by_dj?: boolean | null;
   hidden_by_venue?: boolean | null;
-  bookings?: { status: string; completed_at?: string | null } | null;
-  venue_posts?: { title: string; event_date?: string | null } | null;
-  dj_profiles?: { name: string } | null;
-  venue_profiles?: { name: string } | null;
+  bookings?: { status?: string | null; completed_at?: string | null } | { status?: string | null; completed_at?: string | null }[] | null;
+  venue_posts?: { title?: string | null; event_date?: string | null; deadline?: string | null; start_time?: string | null; post_type?: string | null } | { title?: string | null; event_date?: string | null; deadline?: string | null; start_time?: string | null; post_type?: string | null }[] | null;
+  dj_profiles?: { name?: string | null } | { name?: string | null }[] | null;
+  venue_profiles?: { name?: string | null } | { name?: string | null }[] | null;
 }
 
 export interface ChatMessageRow {
@@ -52,36 +55,54 @@ export interface ChatMessageRow {
   sender_id: string;
   text: string;
   created_at: string;
+  read_at?: string | null;
+}
+
+function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+function safeString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 export function mapChatThread(row: ChatThreadRow): ChatThread {
+  const booking = firstRelation(row.bookings);
+  const post = firstRelation(row.venue_posts);
+  const dj = firstRelation(row.dj_profiles);
+  const venue = firstRelation(row.venue_profiles);
+
   return {
-    id: row.id,
-    applicationId: row.application_id,
+    id: safeString(row.id) ?? "",
+    applicationId: safeString(row.application_id) ?? "",
     bookingId: row.booking_id ?? null,
-    bookingStatus: row.bookings?.status ?? null,
-    bookingCompletedAt: row.bookings?.completed_at ?? null,
-    bookingEventDate: row.venue_posts?.event_date ?? null,
-    gigId: row.gig_id,
-    djId: row.dj_id,
-    venueId: row.venue_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    bookingStatus: booking?.status ?? null,
+    bookingCompletedAt: booking?.completed_at ?? null,
+    bookingEventDate: post?.event_date ?? post?.deadline ?? null,
+    bookingEventTime: post?.start_time ?? null,
+    bookingPostType: post?.post_type ?? null,
+    gigId: safeString(row.gig_id) ?? "",
+    djId: safeString(row.dj_id) ?? "",
+    venueId: safeString(row.venue_id) ?? "",
+    createdAt: safeString(row.created_at) ?? new Date(0).toISOString(),
+    updatedAt: safeString(row.updated_at) ?? safeString(row.created_at) ?? new Date(0).toISOString(),
     hiddenByDj: row.hidden_by_dj === true,
     hiddenByVenue: row.hidden_by_venue === true,
-    gigTitle: row.venue_posts?.title ?? null,
-    djName: row.dj_profiles?.name ?? null,
-    venueName: row.venue_profiles?.name ?? null,
+    gigTitle: post?.title ?? null,
+    djName: dj?.name ?? null,
+    venueName: venue?.name ?? null,
   };
 }
 
 export function mapChatMessage(row: ChatMessageRow): ChatMessage {
   return {
-    id: row.id,
-    threadId: row.thread_id,
-    senderId: row.sender_id,
-    text: row.text,
-    createdAt: row.created_at,
+    id: safeString(row.id) ?? "",
+    threadId: safeString(row.thread_id) ?? "",
+    senderId: safeString(row.sender_id) ?? "",
+    text: safeString(row.text) ?? "",
+    createdAt: safeString(row.created_at) ?? new Date(0).toISOString(),
+    readAt: safeString(row.read_at) ?? null,
   };
 }
 

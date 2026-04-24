@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { createApplication, checkApplied, createNotification } from "@/hooks/useMarketplace";
-import type { VenuePost } from "@/hooks/useMarketplace";
+import { createApplication, checkApplied } from "@/domains/applications/applications.hooks";
+import { createNotification } from "@/domains/notifications/notifications.hooks";
+import type { VenuePost } from "@/domains/posts/posts.hooks";
 import { GIG_STATUS_LABEL, getGigTypeBadgeClass, getGigTypeLabel, isOpenGig } from "@/lib/gigs";
 import { getCityLabel } from "@/lib/geography";
 import { ArrowLeft, MapPin, Clock, Music, Calendar, Briefcase, Send, Tag } from "lucide-react";
@@ -13,9 +14,10 @@ import { cachedRequest, getCachedValue, setCachedValue } from "@/lib/requestCach
 const PostDetail = () => {
   const { id } = useParams();
   const { user, djProfile } = useAuth();
-  const cachedPost = id ? getCachedValue<(VenuePost & { venue_profiles?: { name?: string | null; user_id?: string | null } | null })>(`post:${id}`) : null;
+  const cachedPost = id ? getCachedValue<(VenuePost & { venue_profiles?: { name?: string | null; user_id?: string | null; image_url?: string | null } | null })>(`post:${id}`) : null;
   const [post, setPost] = useState<VenuePost | null>(() => cachedPost);
   const [venueName, setVenueName] = useState(() => cachedPost?.venue_profiles?.name ?? "");
+  const [venueImage, setVenueImage] = useState<string | null>(() => cachedPost?.venue_profiles?.image_url ?? null);
   const [venueUserId, setVenueUserId] = useState<string | null>(() => cachedPost?.venue_profiles?.user_id ?? null);
   const [applied, setApplied] = useState(false);
   const [loading, setLoading] = useState(() => !cachedPost);
@@ -24,15 +26,16 @@ const PostDetail = () => {
     if (!id) return;
     const fetchData = async () => {
       const cacheKey = `post:${id}`;
-      const cached = getCachedValue<(VenuePost & { venue_profiles?: { name?: string | null; user_id?: string | null } | null })>(cacheKey);
+      const cached = getCachedValue<(VenuePost & { venue_profiles?: { name?: string | null; user_id?: string | null; image_url?: string | null } | null })>(cacheKey);
       if (cached) {
         setPost(cached);
         setVenueName(cached.venue_profiles?.name ?? "");
+        setVenueImage(cached.venue_profiles?.image_url ?? null);
         setVenueUserId(cached.venue_profiles?.user_id ?? null);
         setLoading(false);
       }
-      const data = await cachedRequest<(VenuePost & { venue_profiles?: { name?: string | null; user_id?: string | null } | null }) | null>(cacheKey, async () => {
-        const { data, error } = await supabase.from("venue_posts").select("*, venue_profiles(name, user_id)").eq("id", id).single();
+      const data = await cachedRequest<(VenuePost & { venue_profiles?: { name?: string | null; user_id?: string | null; image_url?: string | null } | null }) | null>(cacheKey, async () => {
+        const { data, error } = await supabase.from("venue_posts").select("*, venue_profiles(name, user_id, image_url)").eq("id", id).single();
         if (error) {
           console.error("Failed to load post", error);
           return null;
@@ -43,6 +46,7 @@ const PostDetail = () => {
         setCachedValue(cacheKey, data as any);
         setPost(data as any);
         setVenueName((data as any).venue_profiles?.name ?? "");
+        setVenueImage((data as any).venue_profiles?.image_url ?? null);
         setVenueUserId((data as any).venue_profiles?.user_id ?? null);
       }
       if (djProfile && data) {
@@ -65,6 +69,7 @@ const PostDetail = () => {
   );
 
   const isClosed = !isOpenGig(post);
+  const displayDate = post.event_date ?? post.deadline ?? null;
 
   const handleApply = async () => {
     if (!djProfile) {
@@ -121,12 +126,24 @@ const PostDetail = () => {
               </div>
             </div>
 
-            {venueName && <p className="text-sm text-muted-foreground">Площадка: <span className="font-semibold text-foreground">{venueName}</span></p>}
+            <div className="flex min-w-0 items-center gap-3 rounded-xl border border-white/5 bg-[#10131a] p-3">
+              {venueImage ? (
+                <img src={venueImage} alt={venueName || "Площадка"} className="h-10 w-10 shrink-0 rounded-full object-cover" />
+              ) : (
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                  {(venueName || "П").slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Опубликовано площадкой</p>
+                <p className="truncate text-base font-semibold text-foreground">{venueName || "Площадка"}</p>
+              </div>
+            </div>
 
             <div className="flex min-w-0 items-center gap-2.5 text-muted-foreground"><MapPin className="h-4 w-4 shrink-0" /> <span className="min-w-0 truncate">{getCityLabel(post.city)}</span></div>
 
             <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4 text-sm">
-              {post.event_date && <div className="premium-row p-3 text-muted-foreground"><Calendar className="mb-1 h-4 w-4 text-primary" /><span>{post.event_date}</span></div>}
+              {displayDate && <div className="premium-row p-3 text-muted-foreground"><Calendar className="mb-1 h-4 w-4 text-primary" /><span>{displayDate}</span></div>}
               {post.start_time && <div className="premium-row p-3 text-muted-foreground"><Clock className="mb-1 h-4 w-4 text-primary" /><span>{post.start_time}{post.duration ? ` · ${post.duration}` : ""}</span></div>}
               {post.budget && <div className="rounded-xl border border-primary/25 bg-primary/10 p-3 font-mono text-primary"><Tag className="mb-1 h-4 w-4" /><span>{post.budget}</span></div>}
               {post.frequency && <div className="premium-row p-3 text-muted-foreground"><Briefcase className="mb-1 h-4 w-4 text-primary" /><span>{post.frequency}</span></div>}

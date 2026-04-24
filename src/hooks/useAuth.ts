@@ -17,6 +17,7 @@ interface AuthState {
   venueProfile: VenueProfile | null;
   signOut: () => Promise<void>;
   refreshProfiles: () => Promise<void>;
+  applyProfilePatch: (kind: "dj" | "venue", profile: DjProfile | VenueProfile | null) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -51,6 +52,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [djProfile, setDjProfile] = useState<DjProfile | null>(() => readStoredProfile<DjProfile>("djhub_dj_profile"));
   const [venueProfile, setVenueProfile] = useState<VenueProfile | null>(() => readStoredProfile<VenueProfile>("djhub_venue_profile"));
   const initializedRef = useRef(false);
+
+  const applyProfilePatch = (kind: "dj" | "venue", profile: DjProfile | VenueProfile | null) => {
+    if (kind === "dj") {
+      const nextDj = profile as DjProfile | null;
+      setDjProfile(nextDj);
+      syncProfileToLocalStorage(nextDj, venueProfile);
+      schedulePrivateWarmup(nextDj, venueProfile);
+      return;
+    }
+
+    const nextVenue = profile as VenueProfile | null;
+    setVenueProfile(nextVenue);
+    syncProfileToLocalStorage(djProfile, nextVenue);
+    schedulePrivateWarmup(djProfile, nextVenue);
+  };
 
  const loadUserData = async (currentUser: User | null) => {
   if (!currentUser) {
@@ -150,7 +166,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
   return React.createElement(
     AuthContext.Provider,
-    { value: { user, isAdmin, loading, profilesLoading, signOut, djProfile, venueProfile, refreshProfiles } },
+    { value: { user, isAdmin, loading, profilesLoading, signOut, djProfile, venueProfile, refreshProfiles, applyProfilePatch } },
     children
   );
 };

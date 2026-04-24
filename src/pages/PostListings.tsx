@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { deleteVenuePost, updateVenuePost, useVenuePosts, type VenuePost } from "@/hooks/useMarketplace";
+import { deleteVenuePost, updateVenuePost, useVenuePosts, type VenuePost } from "@/domains/posts/posts.hooks";
 import { GIG_DURATION_OPTIONS, GIG_TYPE_FILTER_OPTIONS, GIG_STATUS_LABEL, type GigStatus, type GigType } from "@/lib/gigs";
 import { getCityLabel } from "@/lib/geography";
 import { MUSIC_STYLES } from "@/data/djhub-data";
@@ -26,7 +26,7 @@ const PostListings = () => {
   const [reopeningPost, setReopeningPost] = useState<VenuePost | null>(null);
   const deferredSearch = useDeferredValue(search);
 
-  const { posts: rawPosts, refetch, addPost, updatePost, removePost } = useVenuePosts({
+  const { posts: rawPosts, loading, refetch, addPost, updatePost, removePost } = useVenuePosts({
     city: filterCity || undefined,
     style: filterStyle || undefined,
     status: tab,
@@ -161,7 +161,13 @@ const PostListings = () => {
           </div>
         )}
 
-        {posts.length === 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="h-64 animate-pulse rounded-2xl border border-white/5 bg-[#171a20] shadow-lg" />
+            ))}
+          </div>
+        ) : posts.length === 0 ? (
           <div className="text-center py-16 space-y-3">
             <p className="text-muted-foreground text-sm">{tab === "open" ? "Нет активных публикаций" : "Нет закрытых публикаций"}</p>
             {hasActiveFilters && (
@@ -179,9 +185,13 @@ const PostListings = () => {
                     post={post}
                     onReopen={() => setReopeningPost(post)}
                     onDelete={async () => {
-                      const { error } = await deleteVenuePost(post.id);
+                      const { error, action } = await deleteVenuePost(post.id);
                       if (error) {
                         toast.error(error.message || "Не удалось удалить публикацию");
+                        return;
+                      }
+                      if (action !== "deleted") {
+                        toast.error("Публикация не была удалена");
                         return;
                       }
                       toast.success("Публикация удалена");
@@ -250,8 +260,10 @@ const ReopenPostModal = ({ post, onClose, onSaved }: { post: VenuePost; onClose:
   const [startTime, setStartTime] = useState(post.start_time ?? "");
   const [duration, setDuration] = useState(post.duration ?? "");
   const [saving, setSaving] = useState(false);
-  const canSubmit = budget.trim() && eventDate && startTime && duration;
-  const fieldCls = "premium-input";
+  const canSubmit = post.post_type === "gig"
+    ? !!(budget.trim() && eventDate && startTime && duration)
+    : !!(eventDate && startTime);
+  const fieldCls = "premium-input w-full";
 
   const handleSubmit = async () => {
     if (!canSubmit) {
@@ -263,7 +275,8 @@ const ReopenPostModal = ({ post, onClose, onSaved }: { post: VenuePost; onClose:
       budget: budget.trim(),
       event_date: eventDate,
       start_time: startTime,
-      duration,
+      duration: post.post_type === "gig" ? duration : post.duration,
+      deadline: post.post_type === "casting" ? eventDate : post.deadline,
       status: "open",
     };
 
@@ -282,7 +295,7 @@ const ReopenPostModal = ({ post, onClose, onSaved }: { post: VenuePost; onClose:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/75 px-4 backdrop-blur-md">
-      <div className="profile-section w-full max-w-md premium-surface p-5" onClick={(event) => event.stopPropagation()}>
+      <div className="profile-section w-full max-w-lg premium-surface p-5" onClick={(event) => event.stopPropagation()}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-foreground">Открыть публикацию</h2>
@@ -297,16 +310,16 @@ const ReopenPostModal = ({ post, onClose, onSaved }: { post: VenuePost; onClose:
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Бюджет</label>
             <input className={fieldCls} value={budget} onChange={(event) => setBudget(event.target.value.replace(/\D/g, ""))} inputMode="numeric" />
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(160px,1.2fr)_minmax(120px,1fr)_minmax(0,1fr)]">
+            <div className="w-full">
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Дата</label>
-              <input className={fieldCls} type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
+              <input className={`${fieldCls} min-w-[150px] pr-10`} type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
             </div>
-            <div>
+            <div className="w-full">
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Время</label>
               <input className={fieldCls} type="time" min="00:00" max="23:59" step="300" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
             </div>
-            <div>
+            <div className="w-full">
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Длительность</label>
               <select className="djhub-select w-full text-sm" value={duration} onChange={(event) => setDuration(event.target.value)}>
                 <option value="">Выбрать</option>

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useReviewsForProfile, useVenuePostsByVenue } from "@/hooks/useMarketplace";
+import { useVenuePostsByVenue } from "@/domains/posts/posts.hooks";
+import { useReviewsForProfile } from "@/domains/reviews/reviews.hooks";
 import { MapPin, ArrowLeft, Disc, Utensils, Star, ExternalLink } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import VenuePostCard from "@/components/VenuePostCard";
@@ -14,6 +15,7 @@ import {
   getVenueOptionLabel,
 } from "@/lib/venueOptions";
 import { getCachedValue, setCachedValue } from "@/lib/requestCache";
+import VerificationBadge, { getVerificationKind } from "@/components/VerificationBadge";
 
 const VenueProfile = () => {
   const { id } = useParams();
@@ -26,7 +28,7 @@ const VenueProfile = () => {
     return id ? cached?.status !== "active" : true;
   });
   const [showReviews, setShowReviews] = useState(false);
-  const { posts } = useVenuePostsByVenue(id);
+  const { posts, loading: postsLoading } = useVenuePostsByVenue(id);
   const reviewData = useReviewsForProfile(id);
 
   useEffect(() => {
@@ -117,6 +119,7 @@ const VenueProfile = () => {
     VENUE_EQUIPMENT_OPTIONS
   );
   const heroImage = getVenueImage(venue.name, venue.image_url);
+  const verificationKind = getVerificationKind(venue);
 
   return (
     <div className="min-h-screen pb-12">
@@ -148,7 +151,10 @@ const VenueProfile = () => {
                   <span className="truncate">{reviewData.count > 0 ? `${reviewData.averageRating.toFixed(1)} · ${reviewData.count} отзывов` : "Рейтинг появится скоро"}</span>
                 </span>
               </div>
-              <h1 className="line-clamp-2 break-words text-4xl font-bold leading-tight text-white drop-shadow sm:text-5xl">{venue.name}</h1>
+              <div className="inline-flex max-w-full min-w-0 items-center gap-1.5 align-middle">
+                <h1 className="min-w-0 line-clamp-2 break-words text-4xl font-bold leading-tight text-white drop-shadow sm:text-5xl">{venue.name}</h1>
+                <VerificationBadge kind={verificationKind} className="h-[18px] w-[18px] text-[10px]" />
+              </div>
               <div className="flex min-w-0 flex-wrap gap-2">
                 {venue.type && <span className="max-w-full truncate rounded-full border border-primary/25 bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">{venueTypeLabel}</span>}
                 {venue.music_styles.map((style) => (
@@ -248,7 +254,13 @@ const VenueProfile = () => {
               <p className="text-xs font-semibold uppercase text-primary">Публикации</p>
               <h2 className="mt-1 text-xl font-bold text-foreground">Открытые выступления и кастинги</h2>
             </div>
-            {posts.length > 0 ? (
+            {postsLoading ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="h-64 animate-pulse rounded-2xl border border-white/5 bg-[#171a20] shadow-lg" />
+                ))}
+              </div>
+            ) : posts.length > 0 ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {posts.map((post, index) => (
                   <VenuePostCard key={post.id} post={post} index={index} />

@@ -3,14 +3,14 @@ import { useEffect, lazy, Suspense } from "react";
 import { toast } from "sonner";
 import { Shield, Loader2 } from "lucide-react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
 import { preloadCriticalRoutes, routeLoaders } from "@/lib/routePreload";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
-import Footer from "./components/footer";
+import Footer from "./components/Footer";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ThemeProvider } from "@/hooks/useTheme";
 const Index = lazy(routeLoaders.index);
 const RoleSelect = lazy(routeLoaders.roleSelect);
 const Register = lazy(routeLoaders.register);
@@ -115,15 +115,16 @@ const AppContent = () => {
   );
 };
 const App = () => (
-  <AuthProvider>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
-    </TooltipProvider>
-  </AuthProvider>
+  <ThemeProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Sonner />
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
+  </ThemeProvider>
 );
 
 export default App;

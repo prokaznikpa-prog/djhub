@@ -74,6 +74,7 @@ export function toApplicationDbStatus(status: ApplicationStatusInput): Applicati
 }
 
 export function getApplicationStatusLabel(status: ApplicationStatusInput): string {
+  if (normalizeApplicationStatus(status) === "accepted") return "Чат открыт";
   return APPLICATION_STATUS_LABEL[normalizeApplicationStatus(status)];
 }
 

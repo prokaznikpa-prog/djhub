@@ -74,6 +74,7 @@ export function mapDjToDb(
   if ("openToCollab" in updates) result.open_to_collab = updates.openToCollab;
   if ("openToCrew" in updates) result.open_to_crew = updates.openToCrew;
   if ("image" in updates) result.image_url = updates.image;
+  if ("is_verified" in updates) (result as any).is_verified = updates.is_verified;
 
   return result;
 }

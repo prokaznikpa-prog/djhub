@@ -2,45 +2,127 @@ import { useState, useMemo, useEffect, useCallback, useDeferredValue } from "rea
 import { supabase } from "@/integrations/supabase/client";
 import { MUSIC_STYLES } from "@/data/djhub-data";
 import DjCard from "@/components/DjCard";
-import CatalogCarousel from "@/components/CatalogCarousel";
+import CatalogGrid from "@/components/CatalogGrid";
+import CatalogSortBar, { type CatalogSortKey } from "@/components/CatalogSortBar";
 import { Filter, SlidersHorizontal, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
-import type { Tables } from "@/integrations/supabase/types";
-import { cachedRequest, getCachedValue, setCachedValue } from "@/lib/requestCache";
+import { cachedRequest, getCacheSnapshot, setCachedValue } from "@/lib/requestCache";
 import { calculateDjScore, getMatchReasons } from "@/utils/matching";
 import { getCleanDisplayOptions } from "@/lib/displayLabels";
 import { getCityLabel } from "@/lib/geography";
 import { getDjExperienceLabel } from "@/lib/djOptions";
+import { matchesSearch } from "@/lib/searchNormalization";
+
+type DJProfile = {
+  id: string;
+  user_id: string;
+  name: string;
+  city: string;
+  styles: string[];
+  priority_style?: string | null;
+  price?: string | null;
+  experience?: string | null;
+  played_at?: string[] | null;
+  image_url?: string | null;
+  created_at?: string | null;
+  is_verified?: boolean | null;
+  is_trusted?: boolean | null;
+  availability?: string | null;
+  bio?: string | null;
+  contact?: string | null;
+  format?: string | null;
+  status: "active" | "hidden" | "archived" | "blocked";
+};
+
+const DJ_PROXY_URL = "http://localhost:3001/api/djs";
+
+async function fetchDjsFromSupabase(): Promise<DJProfile[]> {
+  const { data, error } = await supabase
+    .from("dj_profiles")
+    .select("id,user_id,name,city,styles,priority_style,price,experience,played_at,image_url,status,created_at,is_verified,is_trusted")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Failed to load DJ catalog", error);
+    return [];
+  }
+
+  return (data ?? []) as DJProfile[];
+}
+
+async function fetchDjsProxyFirst(): Promise<DJProfile[]> {
+  try {
+    const response = await fetch(DJ_PROXY_URL);
+    if (!response.ok) {
+      throw new Error(`Proxy responded with ${response.status}`);
+    }
+
+    const payload = await response.json() as { ok?: boolean; data?: DJProfile[] };
+    if (!payload?.ok || !Array.isArray(payload.data)) {
+      throw new Error("Proxy returned unexpected DJ payload");
+    }
+
+    return payload.data;
+  } catch (error) {
+    console.warn("DJ catalog proxy failed, falling back to Supabase", error);
+    return fetchDjsFromSupabase();
+  }
+}
 
 const DjCatalog = () => {
   const cacheKey = "catalog:djs:active";
-  const [allDjs, setAllDjs] = useState<Tables<"dj_profiles">[]>(() => getCachedValue<Tables<"dj_profiles">[]>(cacheKey, { allowStale: true }) ?? []);
-  const [loading, setLoading] = useState(() => !getCachedValue<Tables<"dj_profiles">[]>(cacheKey, { allowStale: true }));
+  const cacheSnapshot = getCacheSnapshot<DJProfile[]>(cacheKey);
+  const CATALOG_CACHE_TTL = 90_000;
+  const [allDjs, setAllDjs] = useState<DJProfile[]>(() => cacheSnapshot.value ?? []);
+  const [loading, setLoading] = useState(() => !cacheSnapshot.value);
   const [showFilters, setShowFilters] = useState(false);
   const [search, setSearch] = useState("");
   const [filterCity, setFilterCity] = useState("");
   const [filterStyle, setFilterStyle] = useState("");
   const [filterExperience, setFilterExperience] = useState("");
-  const [sortBy, setSortBy] = useState<"match" | "name" | "price">("match");
+  const [sortBy, setSortBy] = useState<CatalogSortKey>("match");
   const { isAdmin, venueProfile } = useAuth();
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
-    const cached = getCachedValue<Tables<"dj_profiles">[]>(cacheKey, { allowStale: true });
-    if (cached) {
-      setAllDjs(cached);
+    let active = true;
+    const snapshot = getCacheSnapshot<DJProfile[]>(cacheKey);
+    if (snapshot.value) {
+      setAllDjs(snapshot.value);
       setLoading(false);
+    } else {
+      setAllDjs([]);
+      setLoading(true);
+    }
+
+    if (snapshot.exists && !snapshot.isStale) {
+      return () => {
+        active = false;
+      };
     }
 
     cachedRequest(cacheKey, async () => {
-      const { data } = await supabase.from("dj_profiles").select("*").eq("status", "active").order("created_at", { ascending: false });
-      return data ?? [];
-    }).then((data) => {
-      setAllDjs(data);
-      data.forEach((dj) => setCachedValue(`dj:${dj.id}`, dj));
+      return fetchDjsProxyFirst();
+    }, CATALOG_CACHE_TTL)
+      .then((data) => {
+      if (!active) return;
+      const safeData = (data ?? []) as DJProfile[];
+      setAllDjs(safeData);
+      safeData.forEach((dj) => setCachedValue(`dj:${dj.id}`, dj, CATALOG_CACHE_TTL));
       setLoading(false);
-    });
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error("Failed to hydrate DJ catalog", error);
+        setAllDjs([]);
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleDeleteDj = useCallback(async (id: string) => {
@@ -77,11 +159,13 @@ const DjCatalog = () => {
   const filtered = useMemo(() => {
     let list = [...allDjs];
     if (deferredSearch) {
-      const q = deferredSearch.toLowerCase();
       list = list.filter((d) =>
-        d.name.toLowerCase().includes(q) ||
-        d.city.toLowerCase().includes(q) ||
-        d.styles.some((s) => s.toLowerCase().includes(q))
+        matchesSearch(deferredSearch, [
+          d.name,
+          d.city,
+          getCityLabel(d.city),
+          ...(d.styles ?? []),
+        ])
       );
     }
     if (filterCity) list = list.filter((d) => d.city === filterCity);
@@ -101,8 +185,18 @@ const DjCatalog = () => {
         const numB = parseInt(b.price.replace(/\D/g, "")) || 0;
         return numA - numB;
       });
-    } else {
-      list.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortBy === "popular") {
+      list.sort((a, b) => {
+        const ratingA = Number((a as any).rating ?? (a as any).average_rating ?? 0);
+        const ratingB = Number((b as any).rating ?? (b as any).average_rating ?? 0);
+        if (ratingB !== ratingA) return ratingB - ratingA;
+        const playedA = Array.isArray(a.played_at) ? a.played_at.length : 0;
+        const playedB = Array.isArray(b.played_at) ? b.played_at.length : 0;
+        if (playedB !== playedA) return playedB - playedA;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+    } else if (sortBy === "newest") {
+      list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
     return list;
   }, [allDjs, deferredSearch, filterCity, filterStyle, filterExperience, sortBy, venueProfile]);
@@ -126,7 +220,7 @@ const DjCatalog = () => {
           </button>
         </div>
 
-        <div className="relative mb-4">
+        <div className="relative mb-3">
   <Search className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 shrink-0 text-muted-foreground" />
 
   <input
@@ -147,6 +241,8 @@ const DjCatalog = () => {
   )}
 </div>
 
+        <CatalogSortBar value={sortBy} onChange={setSortBy} />
+
         {showFilters && (
           <div className="premium-surface mb-5 flex flex-wrap items-center gap-2 px-4 py-3">
             <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
@@ -162,11 +258,6 @@ const DjCatalog = () => {
               <option value="">Любой опыт</option>
               {experiences.map((e) => <option key={e} value={e}>{getDjExperienceLabel(e)}</option>)}
             </select>
-            <select className={selectCls} value={sortBy} onChange={(e) => setSortBy(e.target.value as "match" | "name" | "price")}>
-              <option value="match">Лучшие совпадения</option>
-              <option value="name">По имени</option>
-              <option value="price">По цене</option>
-            </select>
             {hasActiveFilters && (
               <button onClick={resetFilters} className="text-[10px] text-primary hover:underline ml-1">
                 Сбросить
@@ -176,24 +267,21 @@ const DjCatalog = () => {
         )}
 
         {loading ? (
-          <CatalogCarousel
-            items={[] as Tables<"dj_profiles">[]}
+          <CatalogGrid
+            items={[] as DJProfile[]}
             loading
-            variant="dj"
             getKey={(dj) => dj.id}
             renderItem={() => null}
           />
         ) : filtered.length > 0 ? (
-          <CatalogCarousel
+          <CatalogGrid
             items={filtered}
-            variant="dj"
             getKey={(dj) => dj.id}
-            renderItem={(dj, i, isActive) => (
+            renderItem={(dj, i) => (
               <DjCard
                 dj={dj}
                 index={i}
                 isAdmin={isAdmin}
-                isCarouselActive={isActive}
                 isBestMatch={!!venueProfile && sortBy === "match" && i < 3}
                 matchReasons={venueProfile ? getMatchReasons(dj, venueProfile) : []}
                 onDelete={handleDeleteDj}

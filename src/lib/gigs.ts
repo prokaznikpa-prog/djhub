@@ -160,6 +160,10 @@ export function toGigInsert(input: {
   schedule?: string;
   frequency?: string;
 }): GigInsert {
+  const eventDate = input.type === "casting"
+    ? input.deadline || input.eventDate || null
+    : input.eventDate || input.deadline || null;
+
   return {
     venue_id: input.venueId,
     title: input.title,
@@ -169,12 +173,12 @@ export function toGigInsert(input: {
     music_styles: input.musicStyles,
     post_type: input.type,
     status: "open",
-    event_date: input.eventDate || null,
+    event_date: eventDate,
     start_time: input.startTime || null,
     duration: input.duration || null,
     requirements: input.requirements || null,
     portfolio_required: input.portfolioRequired ?? false,
-    deadline: input.deadline || null,
+    deadline: input.type === "casting" ? input.deadline || input.eventDate || null : input.deadline || null,
     schedule: input.schedule || null,
     frequency: input.frequency || null,
     long_term: input.type === "residency",

@@ -1,4 +1,4 @@
-import type { VenuePost } from "@/hooks/useMarketplace";
+import type { VenuePost } from "@/domains/posts/posts.hooks";
 import { Link } from "react-router-dom";
 import { memo } from "react";
 import { MapPin, Clock, Music, Calendar, Briefcase } from "lucide-react";
@@ -16,6 +16,10 @@ interface VenuePostCardProps {
 
 const VenuePostCard = ({ post, index = 0, isBestMatch = false, matchReasons = [] }: VenuePostCardProps) => {
   const isClosed = !isOpenGig(post);
+  const displayDate = post.event_date ?? post.deadline ?? null;
+  const venue = (post as VenuePost & { venue_profiles?: { name?: string | null; image_url?: string | null; avatar?: string | null } | null }).venue_profiles;
+  const venueName = venue?.name ?? "Площадка";
+  const venueImage = venue?.image_url ?? venue?.avatar ?? null;
 
   return (
     <div
@@ -60,8 +64,22 @@ const VenuePostCard = ({ post, index = 0, isBestMatch = false, matchReasons = []
           {post.budget && <span className="max-w-[45%] shrink-0 truncate text-xs font-mono text-primary">{post.budget}</span>}
         </div>
 
+        <div className="flex min-w-0 items-center gap-2 rounded-xl border border-white/5 bg-[#10131a] px-3 py-2">
+          {venueImage ? (
+            <img src={venueImage} alt={venueName} loading="lazy" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+          ) : (
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+              {venueName.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Площадка</p>
+            <p className="truncate text-sm font-semibold text-foreground">{venueName}</p>
+          </div>
+        </div>
+
         <div className="premium-row flex min-w-0 flex-wrap gap-x-3 gap-y-2 px-3 py-2 text-[11px] text-gray-400">
-          {post.event_date && <span className="flex min-w-0 items-center gap-2"><Calendar className="h-4 w-4 shrink-0 opacity-70" /><span className="min-w-0 truncate">{post.event_date}</span></span>}
+          {displayDate && <span className="flex min-w-0 items-center gap-2"><Calendar className="h-4 w-4 shrink-0 opacity-70" /><span className="min-w-0 truncate">{displayDate}</span></span>}
           {post.start_time && <span className="flex min-w-0 items-center gap-2"><Clock className="h-4 w-4 shrink-0 opacity-70" /><span className="min-w-0 truncate">{post.start_time}</span></span>}
           {post.music_styles.length > 0 && <span className="flex min-w-0 items-center gap-2"><Music className="h-4 w-4 shrink-0 opacity-70" /><span className="min-w-0 truncate">{post.music_styles.slice(0, 2).join(", ")}</span></span>}
           {post.frequency && <span className="flex min-w-0 items-center gap-2"><Briefcase className="h-4 w-4 shrink-0 opacity-70" /><span className="min-w-0 truncate">{post.frequency}</span></span>}

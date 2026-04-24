@@ -55,6 +55,7 @@ export function mapVenueToDb(
   if ("music" in updates) result.music_styles = updates.music;
   if ("foodDrinks" in updates) result.food_drinks = updates.foodDrinks;
   if ("image" in updates) result.image_url = updates.image;
+  if ("is_verified" in updates) (result as any).is_verified = updates.is_verified;
 
   return result;
 }

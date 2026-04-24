@@ -2,9 +2,13 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useApplicationsForDj, useApplicationsForVenue,
+} from "@/domains/applications/applications.hooks";
+import {
   useInvitationsForDj, useInvitationsForVenue,
+} from "@/domains/invitations/invitations.hooks";
+import {
   useVenuePostsByVenue, useVenuePosts,
-} from "@/hooks/useMarketplace";
+} from "@/domains/posts/posts.hooks";
 import { getGigTypeLabel, GIG_STATUS_LABEL } from "@/lib/gigs";
 import { getApplicationStatusClass, getApplicationStatusLabel } from "@/lib/applications";
 import { getCityLabel } from "@/lib/geography";
@@ -59,7 +63,7 @@ const EmptySection = ({ text, linkTo, linkLabel }: { text: string; linkTo?: stri
 const DjDashboard = ({ djProfile }: { djProfile: any }) => {
   const { apps } = useApplicationsForDj(djProfile.id);
   const { invites } = useInvitationsForDj(djProfile.id);
-  const { posts: recommended } = useVenuePosts({ status: "open" });
+  const { posts: recommended, loading: recommendedLoading } = useVenuePosts({ status: "open" });
 
   return (
     <div className="space-y-6">
@@ -105,7 +109,13 @@ const DjDashboard = ({ djProfile }: { djProfile: any }) => {
 
       <section className="space-y-2">
         <h2 className="text-lg font-bold flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Рекомендуемые выступления</h2>
-        {recommended.length === 0 ? (
+        {recommendedLoading ? (
+          <div className="space-y-1">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="h-12 animate-pulse rounded-xl border border-white/5 bg-[#171a20]" />
+            ))}
+          </div>
+        ) : recommended.length === 0 ? (
           <EmptySection text="Пока нет открытых возможностей" />
         ) : (
           <div className="space-y-1">
@@ -127,7 +137,7 @@ const DjDashboard = ({ djProfile }: { djProfile: any }) => {
 };
 
 const VenueDashboard = ({ venueProfile }: { venueProfile: any }) => {
-  const { posts } = useVenuePostsByVenue(venueProfile.id);
+  const { posts, loading: postsLoading } = useVenuePostsByVenue(venueProfile.id);
   const { apps } = useApplicationsForVenue(venueProfile.id);
   const { invites } = useInvitationsForVenue(venueProfile.id);
   const openPosts = posts.filter((post) => post.status === "open");
@@ -136,7 +146,13 @@ const VenueDashboard = ({ venueProfile }: { venueProfile: any }) => {
     <div className="space-y-6">
       <section className="space-y-2">
         <h2 className="text-lg font-bold flex items-center gap-2"><FileText className="h-4 w-4 text-primary" /> Мои публикации</h2>
-        {openPosts.length === 0 ? (
+        {postsLoading ? (
+          <div className="space-y-1">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="h-12 animate-pulse rounded-xl border border-white/5 bg-[#171a20]" />
+            ))}
+          </div>
+        ) : openPosts.length === 0 ? (
           <EmptySection text="Нет публикаций — создайте первое выступление, кастинг или резидентство для DJ" linkTo="/posts" linkLabel="Создать публикацию →" />
         ) : (
           <div className="space-y-1">
