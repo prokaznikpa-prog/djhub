@@ -1,3 +1,5 @@
-# Welcome to your Lovable project
+# DJHUB
 
-TODO: Document your project here
+Платформа для поиска DJ и заведений в Санкт-Петербурге
+
+🚀 В разработке
