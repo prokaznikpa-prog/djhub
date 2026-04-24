@@ -1,12 +1,20 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import { createClient } from "@supabase/supabase-js";
 
 const app = express();
+app.use(cors({
+  origin: [
+    "http://localhost:4173",
+    "http://localhost:8080"
+  ],
+}));
 const port = Number(process.env.PORT || 3001);
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const CACHE_TTL = 5 * 60 * 1000;
+const POSTS_CACHE_TTL = 10 * 1000;
 const djsCache = {
   data: null,
   expiresAt: 0,
@@ -100,13 +108,13 @@ function isFresh(cache) {
   return cache.data && cache.expiresAt > Date.now();
 }
 
-async function warmCache(label, cache, loader) {
+async function warmCache(label, cache, loader, ttl = CACHE_TTL) {
   if (cache.promise) return cache.promise;
 
   cache.promise = loader()
     .then((data) => {
       cache.data = data;
-      cache.expiresAt = Date.now() + CACHE_TTL;
+      cache.expiresAt = Date.now() + ttl;
       console.log(`[proxy] preload success: ${label} (${Array.isArray(data) ? data.length : 0} rows)`);
       return data;
     })
@@ -121,13 +129,13 @@ async function warmCache(label, cache, loader) {
   return cache.promise;
 }
 
-function refreshInBackground(label, cache, loader) {
+function refreshInBackground(label, cache, loader, ttl = CACHE_TTL) {
   if (cache.promise) return;
 
   cache.promise = loader()
     .then((data) => {
       cache.data = data;
-      cache.expiresAt = Date.now() + CACHE_TTL;
+      cache.expiresAt = Date.now() + ttl;
       console.log(`[proxy] background refresh success: ${label}`);
       return data;
     })
@@ -140,7 +148,7 @@ function refreshInBackground(label, cache, loader) {
     });
 }
 
-async function handleCachedCollection(req, res, label, cache, loader) {
+async function handleCachedCollection(req, res, label, cache, loader, ttl = CACHE_TTL) {
   console.time(label);
 
   if (isFresh(cache)) {
@@ -154,13 +162,13 @@ async function handleCachedCollection(req, res, label, cache, loader) {
     console.log(`[proxy] cache stale hit: ${label}`);
     res.json({ ok: true, data: cache.data });
     console.timeEnd(label);
-    refreshInBackground(label, cache, loader);
+    refreshInBackground(label, cache, loader, ttl);
     return;
   }
 
   console.log(`[proxy] cache miss: ${label}`);
   try {
-    const data = await warmCache(label, cache, loader);
+    const data = await warmCache(label, cache, loader, ttl);
     res.json({ ok: true, data });
   } catch (error) {
     res.status(500).json({
@@ -180,12 +188,34 @@ app.get("/api/venues", async (req, res) => {
 });
 
 app.get("/api/posts", async (req, res) => {
-  await handleCachedCollection(req, res, "api/posts", postsCache, fetchPostsFromSupabase);
+  if (req.query.ts) {
+    console.time("api/posts");
+    console.log("[proxy] cache bypass: api/posts");
+    postsCache.data = null;
+    postsCache.expiresAt = 0;
+
+    try {
+      const data = await fetchPostsFromSupabase();
+      postsCache.data = data;
+      postsCache.expiresAt = Date.now() + POSTS_CACHE_TTL;
+      res.json({ ok: true, data });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error: error?.message ?? "Unknown proxy error",
+      });
+    }
+
+    console.timeEnd("api/posts");
+    return;
+  }
+
+  await handleCachedCollection(req, res, "api/posts", postsCache, fetchPostsFromSupabase, POSTS_CACHE_TTL);
 });
 
 app.listen(port, () => {
   console.log(`DJHUB backend proxy listening on http://localhost:${port}`);
   void warmCache("api/djs", djsCache, fetchDjsFromSupabase).catch(() => {});
   void warmCache("api/venues", venuesCache, fetchVenuesFromSupabase).catch(() => {});
-  void warmCache("api/posts", postsCache, fetchPostsFromSupabase).catch(() => {});
+  void warmCache("api/posts", postsCache, fetchPostsFromSupabase, POSTS_CACHE_TTL).catch(() => {});
 });

@@ -22,17 +22,64 @@ const getMessageTimestamp = (message: Pick<ChatMessage, "createdAt">) => {
   return Number.isFinite(timestamp) ? timestamp : 0;
 };
 
+const isOptimisticMessage = (message: ChatMessage) => typeof message.id === "string" && message.id.startsWith("temp-");
+
+const findMatchingOptimisticMessageId = (messages: ChatMessage[], incoming: ChatMessage) => {
+  const incomingTimestamp = getMessageTimestamp(incoming);
+  return messages.find((message) => {
+    if (!isOptimisticMessage(message)) return false;
+    if (message.threadId !== incoming.threadId) return false;
+    if (message.senderId !== incoming.senderId) return false;
+    if (message.text.trim() !== incoming.text.trim()) return false;
+    return Math.abs(getMessageTimestamp(message) - incomingTimestamp) < 15_000;
+  })?.id ?? null;
+};
+
+const areMessagesEqual = (a: ChatMessage, b: ChatMessage) => (
+  a.id === b.id
+  && a.threadId === b.threadId
+  && a.senderId === b.senderId
+  && a.text === b.text
+  && a.createdAt === b.createdAt
+  && (a.readAt ?? null) === (b.readAt ?? null)
+);
+
 const mergeMessages = (current: ChatMessage[], incoming: ChatMessage[]) => {
+  if (incoming.length === 0) return current;
+
+  const normalizedCurrent = [...current];
+  incoming.forEach((message) => {
+    if (!message?.id) return;
+    const optimisticId = findMatchingOptimisticMessageId(normalizedCurrent, message);
+    if (!optimisticId) return;
+    const optimisticIndex = normalizedCurrent.findIndex((item) => item.id === optimisticId);
+    if (optimisticIndex >= 0) {
+      normalizedCurrent.splice(optimisticIndex, 1);
+    }
+  });
+
   const merged = new Map<string, ChatMessage>();
-  [...current, ...incoming].forEach((message) => {
+  [...normalizedCurrent, ...incoming].forEach((message) => {
     if (!message?.id) return;
     merged.set(message.id, message);
   });
 
-  return Array.from(merged.values()).sort((a, b) => {
+  const next = Array.from(merged.values()).sort((a, b) => {
     const diff = getMessageTimestamp(a) - getMessageTimestamp(b);
     return diff !== 0 ? diff : a.id.localeCompare(b.id);
   });
+
+  if (next.length !== current.length) {
+    return next;
+  }
+
+  for (let index = 0; index < next.length; index += 1) {
+    if (!areMessagesEqual(next[index], current[index])) {
+      return next;
+    }
+  }
+
+  return current;
 };
 
 const mergePreviews = (
@@ -216,9 +263,11 @@ export function useChatMessages(thread: ChatThread | null, participant: ChatPart
 
     const key = `chat-messages:${thread.id}`;
     if (!opts?.silent) setLoading(true);
+    console.time("chat messages load");
     const next = opts?.force
       ? await fetchChatMessages(thread.id)
       : await cachedRequest(key, () => fetchChatMessages(thread.id), CHAT_CACHE_TTL);
+    console.timeEnd("chat messages load");
     if (currentRequestId !== requestId.current) return;
     setMessages((current) => {
       const merged = mergeMessages(current, next);
@@ -270,7 +319,7 @@ export function useChatMessages(thread: ChatThread | null, participant: ChatPart
           if (!message) return;
           setMessages((current) => {
             const next = mergeMessages(current, [message]);
-            if (next.length === current.length) return current;
+            if (next === current) return current;
             updateMessagesCache((cached) => mergeMessages(cached, [message]));
             return next;
           });
@@ -364,7 +413,7 @@ export function useChatMessages(thread: ChatThread | null, participant: ChatPart
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((current) => {
       const next = mergeMessages(current, [message]);
-      if (next.length === current.length) return current;
+      if (next === current) return current;
       updateMessagesCache((cached) => mergeMessages(cached, [message]));
       return next;
     });
@@ -372,8 +421,8 @@ export function useChatMessages(thread: ChatThread | null, participant: ChatPart
 
   const replaceMessage = useCallback((tempId: string, message: ChatMessage) => {
     setMessages((current) => {
-      const withoutTemp = current.filter((item) => item.id !== tempId);
-      const next = mergeMessages(withoutTemp, [message]);
+      const next = mergeMessages(current.filter((item) => item.id !== tempId), [message]);
+      if (next === current) return current;
       updateMessagesCache((cached) => mergeMessages(cached.filter((item) => item.id !== tempId), [message]));
       return next;
     });

@@ -45,6 +45,21 @@ async function fetchVenuesProxyFirst(): Promise<Tables<"venue_profiles">[]> {
   }
 }
 
+function warmVenueEntityCache(items: Tables<"venue_profiles">[], ttl: number) {
+  const run = () => {
+    items.forEach((venue) => {
+      setCachedValue(`venue:${venue.id}`, venue, ttl);
+    });
+  };
+
+  if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+    window.requestIdleCallback(run);
+    return;
+  }
+
+  setTimeout(run, 0);
+}
+
 const VenueCatalog = () => {
   const cacheKey = "catalog:venues:active";
   const cacheSnapshot = getCacheSnapshot<Tables<"venue_profiles">[]>(cacheKey);
@@ -73,17 +88,20 @@ const VenueCatalog = () => {
       };
     }
 
+    console.time("venue catalog load");
     cachedRequest(cacheKey, async () => {
       return fetchVenuesProxyFirst();
     }, CATALOG_CACHE_TTL).then((data) => {
       if (!active) return;
       setVenues(data);
-      data.forEach((venue) => setCachedValue(`venue:${venue.id}`, venue, CATALOG_CACHE_TTL));
+      warmVenueEntityCache(data, CATALOG_CACHE_TTL);
       setLoading(false);
+      console.timeEnd("venue catalog load");
     }).catch((error) => {
       if (!active) return;
       console.error("Failed to hydrate venue catalog", error);
       setLoading(false);
+      console.timeEnd("venue catalog load");
     });
 
     return () => {

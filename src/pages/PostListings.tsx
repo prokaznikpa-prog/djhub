@@ -217,7 +217,11 @@ const PostListings = () => {
           venueId={venueProfile.id}
           venueCity={venueProfile.city}
           onClose={() => setShowCreate(false)}
-          onCreated={(post) => { if (post && tab === "open") addPost(post); else refetch(); setShowCreate(false); }}
+          onCreated={(post) => {
+            if (post && tab === "open") addPost(post);
+            void refetch({ silent: true, force: true, forceRefresh: true });
+            setShowCreate(false);
+          }}
         />
       )}
       {reopeningPost && (
@@ -226,6 +230,7 @@ const PostListings = () => {
           onClose={() => setReopeningPost(null)}
           onSaved={(updates) => {
             updatePost(reopeningPost.id, updates);
+            void refetch({ silent: true, force: true, forceRefresh: true });
             setReopeningPost(null);
           }}
         />

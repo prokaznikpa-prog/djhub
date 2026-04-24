@@ -382,6 +382,7 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
       return;
     }
     updatePost(postId, data ?? { status: nextStatus });
+    void refetchPosts({ silent: true, force: true });
     toast.success("Статус обновлён");
   };
 
@@ -612,7 +613,7 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
         </div>
 
       {showEdit && <EditProfileModal type="venue" venueProfile={venueProfile} onClose={() => setShowEdit(false)} onSaved={refresh} />}
-      {showCreatePost && <CreatePostModal venueId={venueProfile.id} venueCity={venueProfile.city} onClose={() => setShowCreatePost(false)} onCreated={(post) => { if (post) addPost(post); else refetchPosts(); setShowCreatePost(false); }} />}
+      {showCreatePost && <CreatePostModal venueId={venueProfile.id} venueCity={venueProfile.city} onClose={() => setShowCreatePost(false)} onCreated={(post) => { if (post) addPost(post); void refetchPosts({ silent: true, force: true }); setShowCreatePost(false); }} />}
     </ProfilePageShell>
   );
 };

@@ -71,6 +71,21 @@ async function fetchDjsProxyFirst(): Promise<DJProfile[]> {
   }
 }
 
+function warmDjEntityCache(items: DJProfile[], ttl: number) {
+  const run = () => {
+    items.forEach((dj) => {
+      setCachedValue(`dj:${dj.id}`, dj, ttl);
+    });
+  };
+
+  if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+    window.requestIdleCallback(run);
+    return;
+  }
+
+  setTimeout(run, 0);
+}
+
 const DjCatalog = () => {
   const cacheKey = "catalog:djs:active";
   const cacheSnapshot = getCacheSnapshot<DJProfile[]>(cacheKey);
@@ -103,6 +118,7 @@ const DjCatalog = () => {
       };
     }
 
+    console.time("dj catalog load");
     cachedRequest(cacheKey, async () => {
       return fetchDjsProxyFirst();
     }, CATALOG_CACHE_TTL)
@@ -110,14 +126,16 @@ const DjCatalog = () => {
       if (!active) return;
       const safeData = (data ?? []) as DJProfile[];
       setAllDjs(safeData);
-      safeData.forEach((dj) => setCachedValue(`dj:${dj.id}`, dj, CATALOG_CACHE_TTL));
+      warmDjEntityCache(safeData, CATALOG_CACHE_TTL);
       setLoading(false);
+      console.timeEnd("dj catalog load");
       })
       .catch((error) => {
         if (!active) return;
         console.error("Failed to hydrate DJ catalog", error);
         setAllDjs([]);
         setLoading(false);
+        console.timeEnd("dj catalog load");
       });
 
     return () => {

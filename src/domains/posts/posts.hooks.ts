@@ -95,9 +95,12 @@ async function fetchPublicOpenVenuePostsFromSupabase(filters?: { city?: string; 
   return result;
 }
 
-async function fetchPublicOpenVenuePostsProxyFirst(filters?: { city?: string; style?: string; status?: GigStatus; postType?: GigType; venueId?: string }) {
+async function fetchPublicOpenVenuePostsProxyFirst(
+  filters?: { city?: string; style?: string; status?: GigStatus; postType?: GigType; venueId?: string },
+  forceRefresh = false,
+) {
   try {
-    const response = await fetch(POSTS_PROXY_URL);
+    const response = await fetch(forceRefresh ? `${POSTS_PROXY_URL}?ts=${Date.now()}` : POSTS_PROXY_URL);
     if (!response.ok) {
       throw new Error(`Proxy responded with ${response.status}`);
     }
@@ -135,7 +138,7 @@ export function useVenuePosts(filters?: { city?: string; style?: string; status?
   const [loading, setLoading] = useState(() => !cacheSnapshot.value);
   const requestId = useRef(0);
 
-  const fetch = async (opts?: { silent?: boolean; force?: boolean }) => {
+  const fetch = async (opts?: { silent?: boolean; force?: boolean; forceRefresh?: boolean }) => {
     const currentRequestId = ++requestId.current;
     if (filters?.status === "closed" && !filters?.venueId) {
       setPosts([]);
@@ -145,14 +148,16 @@ export function useVenuePosts(filters?: { city?: string; style?: string; status?
     }
 
     if (!opts?.silent) setLoading(true);
+    console.time("posts load");
     const request = async () => {
       const shouldUseProxy = !filters?.venueId && (filters?.status ?? "open") === "open";
       if (shouldUseProxy) {
-        return fetchPublicOpenVenuePostsProxyFirst(filters);
+        return fetchPublicOpenVenuePostsProxyFirst(filters, !!opts?.forceRefresh);
       }
       return fetchPublicOpenVenuePostsFromSupabase(filters);
     };
-    const result = opts?.force ? await request() : await cachedRequest(cacheKey, request, CACHE_TTL);
+    const result = opts?.force || opts?.forceRefresh ? await request() : await cachedRequest(cacheKey, request, CACHE_TTL);
+    console.timeEnd("posts load");
     if (currentRequestId !== requestId.current) return;
     setCachedValue(cacheKey, result, CACHE_TTL);
     setPosts(result);
@@ -281,8 +286,20 @@ export async function createVenuePost(post: VenuePostInsert) {
   if (venue?.status !== "active") {
     return { data: null, error: new Error("Профиль заведения ограничен модератором") };
   }
-  const { data, error } = await supabase.from("venue_posts").insert(post).select().single();
-  return { data, error };
+  const { data, error } = await supabase
+    .from("venue_posts")
+    .insert(post)
+    .select("*, venue_profiles(name, image_url)")
+    .single();
+
+  if (error) return { data: null, error };
+  if (data) {
+    const createdPost = data as VenuePost;
+    syncVenuePostCaches(createdPost);
+    setCachedValue(`post:${createdPost.id}`, createdPost, CACHE_TTL);
+  }
+
+  return { data: data as VenuePost, error: null };
 }
 
 export async function updateVenuePost(id: string, updates: Partial<VenuePost>) {
