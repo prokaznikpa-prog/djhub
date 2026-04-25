@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { deleteVenuePost, updateVenuePost, useVenuePosts, type VenuePost } from "@/domains/posts/posts.hooks";
 import { GIG_DURATION_OPTIONS, GIG_TYPE_FILTER_OPTIONS, GIG_STATUS_LABEL, type GigStatus, type GigType } from "@/lib/gigs";
@@ -24,6 +24,7 @@ const PostListings = () => {
   const [filterType, setFilterType] = useState<"" | GigType>("");
   const [tab, setTab] = useState<OpportunityTab>("open");
   const [reopeningPost, setReopeningPost] = useState<VenuePost | null>(null);
+  const [listSettled, setListSettled] = useState(false);
   const deferredSearch = useDeferredValue(search);
 
   const { posts: rawPosts, loading, refetch, addPost, updatePost, removePost } = useVenuePosts({
@@ -75,6 +76,18 @@ const PostListings = () => {
   }, [scopedPosts, deferredSearch, djProfile, tab]);
 
   const selectCls = "djhub-select";
+
+  useEffect(() => {
+    setListSettled(false);
+  }, [tab, filterCity, filterStyle, filterType, deferredSearch, venueProfile?.id]);
+
+  useEffect(() => {
+    if (loading) return;
+    const frame = window.requestAnimationFrame(() => setListSettled(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, posts.length]);
+
+  const showPostsSkeleton = loading || !listSettled;
 
   return (
     <div className="min-h-screen pt-20 pb-12">
@@ -161,7 +174,7 @@ const PostListings = () => {
           </div>
         )}
 
-        {loading ? (
+        {showPostsSkeleton ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 6 }).map((_, index) => (
               <div key={index} className="h-64 animate-pulse rounded-2xl border border-white/5 bg-[#171a20] shadow-lg" />

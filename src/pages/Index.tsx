@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Disc, Users, MapPin, Music, ArrowRight } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import bgHero from "@/assets/bg-hero.jpg";
 
 const Index = () => {
@@ -10,9 +9,29 @@ const Index = () => {
   const [postCount, setPostCount] = useState(0);
 
   useEffect(() => {
-    supabase.from("dj_profiles").select("id", { count: "exact", head: true }).eq("status", "active").then(({ count }) => setDjCount(count ?? 0));
-    supabase.from("venue_profiles").select("id", { count: "exact", head: true }).eq("status", "active").then(({ count }) => setVenueCount(count ?? 0));
-    supabase.from("venue_posts").select("id", { count: "exact", head: true }).eq("status", "open").then(({ count }) => setPostCount(count ?? 0));
+    const loadCounts = async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL;
+
+        const [djsRes, venuesRes, postsRes] = await Promise.all([
+          fetch(`${API_URL}/api/djs`),
+          fetch(`${API_URL}/api/venues`),
+          fetch(`${API_URL}/api/posts`),
+        ]);
+
+        const djs = await djsRes.json();
+        const venues = await venuesRes.json();
+        const posts = await postsRes.json();
+
+        setDjCount(djs.length || 0);
+        setVenueCount(venues.length || 0);
+        setPostCount(posts.length || 0);
+      } catch (e) {
+        console.error("Ошибка загрузки:", e);
+      }
+    };
+
+    loadCounts();
   }, []);
 
   return (

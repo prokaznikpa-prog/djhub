@@ -246,7 +246,6 @@ const EditProfileModal = ({
             open_to_collab: djCollab,
             open_to_crew: djCrew,
             image_url: djPhoto || null,
-            is_verified: updated.is_verified,
           });
         }
       } else {
@@ -295,8 +294,7 @@ const EditProfileModal = ({
             equipment: vEquipment || null,
             food_drinks: vConditions || null,
             music_styles: vStyles,
-            image_url: vPhoto || null,
-            is_verified: updated.is_verified,
+            image_url: vPhoto || null
           });
         }
       }
