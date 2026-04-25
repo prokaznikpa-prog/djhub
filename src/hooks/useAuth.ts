@@ -9,170 +9,280 @@ import type { DjProfile, VenueProfile } from "@/lib/profile";
 export type { DjProfile, VenueProfile } from "@/lib/profile";
 
 interface AuthState {
-  user: User | null;
-  isAdmin: boolean;
-  loading: boolean;
-  profilesLoading: boolean;
-  djProfile: DjProfile | null;
-  venueProfile: VenueProfile | null;
-  signOut: () => Promise<void>;
-  refreshProfiles: () => Promise<void>;
-  applyProfilePatch: (kind: "dj" | "venue", profile: DjProfile | VenueProfile | null) => void;
+user: User | null;
+isAdmin: boolean;
+loading: boolean;
+profilesLoading: boolean;
+djProfile: DjProfile | null;
+venueProfile: VenueProfile | null;
+signOut: () => Promise<void>;
+refreshProfiles: () => Promise<void>;
+applyProfilePatch: (kind: "dj" | "venue", profile: DjProfile | VenueProfile | null) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 
+const AUTH_TIMEOUT_MS = 3500;
+const PROFILE_TIMEOUT_MS = 5000;
+
+const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+let timeoutId: ReturnType<typeof setTimeout>;
+
+const timeoutPromise = new Promise<never>((_, reject) => {
+timeoutId = setTimeout(() => {
+reject(new Error(`${label} timeout`));
+}, ms);
+});
+
+try {
+return await Promise.race([promise, timeoutPromise]);
+} finally {
+clearTimeout(timeoutId!);
+}
+};
+
 const readStoredProfile = <TProfile,>(key: string): TProfile | null => {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) as TProfile : null;
-  } catch {
-    return null;
-  }
+try {
+const raw = localStorage.getItem(key);
+return raw ? (JSON.parse(raw) as TProfile) : null;
+} catch {
+return null;
+}
 };
 
 const syncProfileToLocalStorage = (djData: DjProfile | null, venueData: VenueProfile | null) => {
-  if (djData) {
-    localStorage.setItem("djhub_dj_profile", JSON.stringify(djData));
-  } else {
-    localStorage.removeItem("djhub_dj_profile");
-  }
-if (venueData) {
-  localStorage.setItem("djhub_venue_profile", JSON.stringify(venueData));
+if (djData) {
+localStorage.setItem("djhub_dj_profile", JSON.stringify(djData));
 } else {
-  localStorage.removeItem("djhub_venue_profile");
+localStorage.removeItem("djhub_dj_profile");
+}
+
+if (venueData) {
+localStorage.setItem("djhub_venue_profile", JSON.stringify(venueData));
+} else {
+localStorage.removeItem("djhub_venue_profile");
 }
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [profilesLoading, setProfilesLoading] = useState(false);
-  const [djProfile, setDjProfile] = useState<DjProfile | null>(() => readStoredProfile<DjProfile>("djhub_dj_profile"));
-  const [venueProfile, setVenueProfile] = useState<VenueProfile | null>(() => readStoredProfile<VenueProfile>("djhub_venue_profile"));
-  const initializedRef = useRef(false);
+const [user, setUser] = useState<User | null>(null);
+const [isAdmin, setIsAdmin] = useState(false);
+const [loading, setLoading] = useState(true);
+const [profilesLoading, setProfilesLoading] = useState(false);
+const [djProfile, setDjProfile] = useState<DjProfile | null>(() =>
+readStoredProfile<DjProfile>("djhub_dj_profile")
+);
+const [venueProfile, setVenueProfile] = useState<VenueProfile | null>(() =>
+readStoredProfile<VenueProfile>("djhub_venue_profile")
+);
 
-  const applyProfilePatch = (kind: "dj" | "venue", profile: DjProfile | VenueProfile | null) => {
-    if (kind === "dj") {
-      const nextDj = profile as DjProfile | null;
-      setDjProfile(nextDj);
-      syncProfileToLocalStorage(nextDj, venueProfile);
-      schedulePrivateWarmup(nextDj, venueProfile);
-      return;
-    }
+const initializedRef = useRef(false);
 
-    const nextVenue = profile as VenueProfile | null;
-    setVenueProfile(nextVenue);
-    syncProfileToLocalStorage(djProfile, nextVenue);
-    schedulePrivateWarmup(djProfile, nextVenue);
-  };
+const applyProfilePatch = (kind: "dj" | "venue", profile: DjProfile | VenueProfile | null) => {
+if (kind === "dj") {
+const nextDj = profile as DjProfile | null;
+setDjProfile(nextDj);
+syncProfileToLocalStorage(nextDj, venueProfile);
+schedulePrivateWarmup(nextDj, venueProfile);
+return;
+}
 
- const loadUserData = async (currentUser: User | null) => {
-  if (!currentUser) {
-    setUser(null);
-    setIsAdmin(false);
-    setProfilesLoading(false);
-    setDjProfile(null);
-    setVenueProfile(null);
-    syncProfileToLocalStorage(null, null);
-    return;
-  }
-
-  setUser(currentUser);
-  setProfilesLoading(true);
-
-  try {
-    const [adminRes, djRes, venueRes] = await Promise.all([
-      supabase.from("user_roles").select("role").eq("user_id", currentUser.id).eq("role", "admin").maybeSingle(),
-      supabase.from("dj_profiles").select("*").eq("user_id", currentUser.id).maybeSingle(),
-      supabase.from("venue_profiles").select("*").eq("user_id", currentUser.id).maybeSingle(),
-    ]);
-
-    setIsAdmin(!!adminRes.data);
-    const dj = mapDjFromDb(djRes.data);
-    const djForUi = mapDjToLocalStorage(dj);
-
-    setDjProfile(djForUi);
-    const venue = mapVenueFromDb(venueRes.data);
-    const venueForUi = mapVenueToLocalStorage(venue);
-
-    setVenueProfile(venueForUi);
-    syncProfileToLocalStorage(
-      djForUi,
-      venueForUi
-    );
-    schedulePrivateWarmup(djForUi, venueForUi);
-  } finally {
-    setProfilesLoading(false);
-  }
+const nextVenue = profile as VenueProfile | null;
+setVenueProfile(nextVenue);
+syncProfileToLocalStorage(djProfile, nextVenue);
+schedulePrivateWarmup(djProfile, nextVenue);
 };
-  useEffect(() => {
-    // 1. Get initial session first
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      setLoading(false);
-      initializedRef.current = true;
-      schedulePublicWarmup();
-      void loadUserData(currentUser);
-    });
 
-    // 2. Listen for subsequent auth changes (sign in/out/token refresh)
-    // IMPORTANT: Do NOT await inside this callback to avoid deadlocks
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      // Skip if this fires before init completes (it fires synchronously during getSession)
-      if (!initializedRef.current) return;
-      loadUserData(session?.user ?? null);
-    });
+const loadUserData = async (currentUser: User | null) => {
+if (!currentUser) {
+setUser(null);
+setIsAdmin(false);
+setProfilesLoading(false);
+setDjProfile(null);
+setVenueProfile(null);
+syncProfileToLocalStorage(null, null);
+return;
+}
 
-    return () => subscription.unsubscribe();
-  }, []);
+setUser(currentUser);
+setProfilesLoading(true);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setIsAdmin(false);
-    setProfilesLoading(false);
-    setDjProfile(null);
-    setVenueProfile(null);
-    syncProfileToLocalStorage(null, null);
-  };
+try {
+const [adminRes, djRes, venueRes] = await withTimeout(
+Promise.all([
+supabase
+.from("user_roles")
+.select("role")
+.eq("user_id", currentUser.id)
+.eq("role", "admin")
+.maybeSingle(),
+supabase
+.from("dj_profiles")
+.select("*")
+.eq("user_id", currentUser.id)
+.maybeSingle(),
+supabase
+.from("venue_profiles")
+.select("*")
+.eq("user_id", currentUser.id)
+.maybeSingle(),
+]),
+PROFILE_TIMEOUT_MS,
+"loadUserData"
+);
 
-  const refreshProfiles = async () => {
-  if (!user) return;
-  setProfilesLoading(true);
+setIsAdmin(!!adminRes.data);
 
-  try {
-    const [djRes, venueRes] = await Promise.all([
-      supabase.from("dj_profiles").select("*").eq("user_id", user.id).maybeSingle(),
-      supabase.from("venue_profiles").select("*").eq("user_id", user.id).maybeSingle(),
-    ]);
+const dj = mapDjFromDb(djRes.data);
+const djForUi = mapDjToLocalStorage(dj);
 
-    const dj = mapDjFromDb(djRes.data);
-    const djForUi = mapDjToLocalStorage(dj);
+const venue = mapVenueFromDb(venueRes.data);
+const venueForUi = mapVenueToLocalStorage(venue);
 
-    setDjProfile(djForUi);
-    const venue = mapVenueFromDb(venueRes.data);
-    const venueForUi = mapVenueToLocalStorage(venue);
+const safeDjForUi = djForUi as DjProfile | null;
+const safeVenueForUi = venueForUi as VenueProfile | null;
 
-    setVenueProfile(venueForUi);
-    syncProfileToLocalStorage(djForUi, venueForUi);
-    schedulePrivateWarmup(djForUi, venueForUi);
-  } finally {
-    setProfilesLoading(false);
-  }
+setDjProfile(safeDjForUi);
+setVenueProfile(safeVenueForUi);
 
+syncProfileToLocalStorage(safeDjForUi, safeVenueForUi);
+schedulePrivateWarmup(safeDjForUi, safeVenueForUi);
+} catch (error) {
+console.warn("Auth profiles unavailable, continuing without blocking app", error);
+} finally {
+setProfilesLoading(false);
+}
 };
-  return React.createElement(
-    AuthContext.Provider,
-    { value: { user, isAdmin, loading, profilesLoading, signOut, djProfile, venueProfile, refreshProfiles, applyProfilePatch } },
-    children
-  );
+
+useEffect(() => {
+let mounted = true;
+
+const initAuth = async () => {
+try {
+const {
+data: { session },
+} = await withTimeout(supabase.auth.getSession(), AUTH_TIMEOUT_MS, "getSession");
+
+if (!mounted) return;
+
+const currentUser = session?.user ?? null;
+
+setUser(currentUser);
+initializedRef.current = true;
+schedulePublicWarmup();
+void loadUserData(currentUser);
+} catch (error) {
+if (!mounted) return;
+
+console.warn("Supabase auth unavailable, app continues as guest", error);
+
+setUser(null);
+setIsAdmin(false);
+setProfilesLoading(false);
+initializedRef.current = true;
+schedulePublicWarmup();
+} finally {
+if (mounted) {
+setLoading(false);
+}
+}
+};
+
+void initAuth();
+
+const {
+data: { subscription },
+} = supabase.auth.onAuthStateChange((_event, session) => {
+if (!initializedRef.current) return;
+void loadUserData(session?.user ?? null);
+});
+
+return () => {
+mounted = false;
+subscription.unsubscribe();
+};
+}, []);
+
+const signOut = async () => {
+try {
+await withTimeout(supabase.auth.signOut(), AUTH_TIMEOUT_MS, "signOut");
+} catch (error) {
+console.warn("Supabase signOut unavailable, clearing local auth state", error);
+}
+
+setUser(null);
+setIsAdmin(false);
+setProfilesLoading(false);
+setDjProfile(null);
+setVenueProfile(null);
+syncProfileToLocalStorage(null, null);
+};
+
+const refreshProfiles = async () => {
+if (!user) return;
+
+setProfilesLoading(true);
+
+try {
+const [djRes, venueRes] = await withTimeout(
+Promise.all([
+supabase
+.from("dj_profiles")
+.select("*")
+.eq("user_id", user.id)
+.maybeSingle(),
+supabase
+.from("venue_profiles")
+.select("*")
+.eq("user_id", user.id)
+.maybeSingle(),
+]),
+PROFILE_TIMEOUT_MS,
+"refreshProfiles"
+);
+
+const dj = mapDjFromDb(djRes.data);
+const djForUi = mapDjToLocalStorage(dj);
+
+const venue = mapVenueFromDb(venueRes.data);
+const venueForUi = mapVenueToLocalStorage(venue);
+
+const safeDjForUi = djForUi as DjProfile | null;
+const safeVenueForUi = venueForUi as VenueProfile | null;
+
+setDjProfile(safeDjForUi);
+setVenueProfile(safeVenueForUi);
+
+syncProfileToLocalStorage(safeDjForUi, safeVenueForUi);
+schedulePrivateWarmup(safeDjForUi, safeVenueForUi);
+} catch (error) {
+console.warn("Failed to refresh profiles without blocking app", error);
+} finally {
+setProfilesLoading(false);
+}
+};
+
+return React.createElement(
+AuthContext.Provider,
+{
+value: {
+user,
+isAdmin,
+loading,
+profilesLoading,
+signOut,
+djProfile,
+venueProfile,
+refreshProfiles,
+applyProfilePatch,
+},
+},
+children
+);
 };
 
 export const useAuth = (): AuthState => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-  };
+const ctx = useContext(AuthContext);
+if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+return ctx;
+};
