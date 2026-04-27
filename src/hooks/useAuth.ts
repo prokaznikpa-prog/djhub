@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useRef, type ReactNode 
 import React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { mapVenueFromDb, mapVenueToLocalStorage } from "@/lib/venueProfile";
+import { mapDjFromDb, mapDjToLocalStorage } from "@/lib/djProfile";
 import { schedulePrivateWarmup, schedulePublicWarmup } from "@/lib/appWarmup";
 import type { DjProfile, VenueProfile } from "@/lib/profile";
 
@@ -22,14 +24,13 @@ applyProfilePatch: (kind: "dj" | "venue", profile: DjProfile | VenueProfile | nu
 const AuthContext = createContext<AuthState | null>(null);
 
 const AUTH_TIMEOUT_MS = 3500;
+const PROFILE_TIMEOUT_MS = 5000;
 
 const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
 let timeoutId: ReturnType<typeof setTimeout>;
 
 const timeoutPromise = new Promise<never>((_, reject) => {
-timeoutId = setTimeout(() => {
-reject(new Error(`${label} timeout`));
-}, ms);
+timeoutId = setTimeout(() => reject(new Error(`${label} timeout`)), ms);
 });
 
 try {
@@ -49,17 +50,11 @@ return null;
 };
 
 const syncProfileToLocalStorage = (djData: DjProfile | null, venueData: VenueProfile | null) => {
-if (djData) {
-localStorage.setItem("djhub_dj_profile", JSON.stringify(djData));
-} else {
-localStorage.removeItem("djhub_dj_profile");
-}
+if (djData) localStorage.setItem("djhub_dj_profile", JSON.stringify(djData));
+else localStorage.removeItem("djhub_dj_profile");
 
-if (venueData) {
-localStorage.setItem("djhub_venue_profile", JSON.stringify(venueData));
-} else {
-localStorage.removeItem("djhub_venue_profile");
-}
+if (venueData) localStorage.setItem("djhub_venue_profile", JSON.stringify(venueData));
+else localStorage.removeItem("djhub_venue_profile");
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -94,22 +89,70 @@ schedulePrivateWarmup(djProfile, nextVenue);
 };
 
 const loadUserData = async (currentUser: User | null) => {
-setUser(currentUser);
-
-// ВАЖНО:
-// Здесь специально НЕ делаем supabase.from("dj_profiles"/"venue_profiles"/"user_roles")
-// потому что без VPN браузер из РФ зависает на прямых запросах к Supabase.
-// Профили временно берём из localStorage, чтобы сайт не блокировался.
+if (!currentUser) {
+setUser(null);
+setIsAdmin(false);
 setProfilesLoading(false);
+setDjProfile(null);
+setVenueProfile(null);
+syncProfileToLocalStorage(null, null);
+return;
+}
+
+setUser(currentUser);
+setProfilesLoading(true);
+
+try {
+const [adminRes, djRes, venueRes] = await withTimeout(
+Promise.all([
+supabase
+.from("user_roles")
+.select("role")
+.eq("user_id", currentUser.id)
+.eq("role", "admin")
+.maybeSingle(),
+
+supabase
+.from("dj_profiles")
+.select("*")
+.eq("user_id", currentUser.id)
+.maybeSingle(),
+
+supabase
+.from("venue_profiles")
+.select("*")
+.eq("user_id", currentUser.id)
+.maybeSingle(),
+]),
+PROFILE_TIMEOUT_MS,
+"loadUserData"
+);
+
+setIsAdmin(!!adminRes.data);
+
+const dj = mapDjFromDb(djRes.data);
+const djForUi = mapDjToLocalStorage(dj) as DjProfile | null;
+
+const venue = mapVenueFromDb(venueRes.data);
+const venueForUi = mapVenueToLocalStorage(venue) as VenueProfile | null;
+
+setDjProfile(djForUi);
+setVenueProfile(venueForUi);
+
+syncProfileToLocalStorage(djForUi, venueForUi);
+schedulePrivateWarmup(djForUi, venueForUi);
+} catch (error) {
+console.warn("Auth profiles unavailable, keeping current/local profile state", error);
 
 const storedDj = readStoredProfile<DjProfile>("djhub_dj_profile");
 const storedVenue = readStoredProfile<VenueProfile>("djhub_venue_profile");
 
 setDjProfile(storedDj);
 setVenueProfile(storedVenue);
-setIsAdmin(false);
-
 schedulePrivateWarmup(storedDj, storedVenue);
+} finally {
+setProfilesLoading(false);
+}
 };
 
 useEffect(() => {
@@ -127,16 +170,18 @@ const currentUser = session?.user ?? null;
 
 initializedRef.current = true;
 schedulePublicWarmup();
-void loadUserData(currentUser);
+
+// ВАЖНО: ждём профиль ДО отключения loading
+await loadUserData(currentUser);
 } catch (error) {
 if (!mounted) return;
 
 console.warn("Supabase auth unavailable, app continues as guest", error);
 
-initializedRef.current = true;
 setUser(null);
 setIsAdmin(false);
 setProfilesLoading(false);
+initializedRef.current = true;
 schedulePublicWarmup();
 } finally {
 if (mounted) {
@@ -176,16 +221,45 @@ syncProfileToLocalStorage(null, null);
 };
 
 const refreshProfiles = async () => {
-// Временно не ходим напрямую в Supabase.
-// Потом переведём refreshProfiles на backend endpoint.
-const storedDj = readStoredProfile<DjProfile>("djhub_dj_profile");
-const storedVenue = readStoredProfile<VenueProfile>("djhub_venue_profile");
+if (!user) return;
 
-setDjProfile(storedDj);
-setVenueProfile(storedVenue);
+setProfilesLoading(true);
+
+try {
+const [djRes, venueRes] = await withTimeout(
+Promise.all([
+supabase
+.from("dj_profiles")
+.select("*")
+.eq("user_id", user.id)
+.maybeSingle(),
+
+supabase
+.from("venue_profiles")
+.select("*")
+.eq("user_id", user.id)
+.maybeSingle(),
+]),
+PROFILE_TIMEOUT_MS,
+"refreshProfiles"
+);
+
+const dj = mapDjFromDb(djRes.data);
+const djForUi = mapDjToLocalStorage(dj) as DjProfile | null;
+
+const venue = mapVenueFromDb(venueRes.data);
+const venueForUi = mapVenueToLocalStorage(venue) as VenueProfile | null;
+
+setDjProfile(djForUi);
+setVenueProfile(venueForUi);
+
+syncProfileToLocalStorage(djForUi, venueForUi);
+schedulePrivateWarmup(djForUi, venueForUi);
+} catch (error) {
+console.warn("Failed to refresh profiles, keeping current/local profile state", error);
+} finally {
 setProfilesLoading(false);
-
-schedulePrivateWarmup(storedDj, storedVenue);
+}
 };
 
 return React.createElement(
