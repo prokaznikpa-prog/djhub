@@ -25,6 +25,7 @@ const AuthContext = createContext<AuthState | null>(null);
 
 const AUTH_TIMEOUT_MS = 3500;
 const PROFILE_TIMEOUT_MS = 5000;
+const API_URL = import.meta.env.VITE_API_URL;
 
 const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
 let timeoutId: ReturnType<typeof setTimeout>;
@@ -55,6 +56,62 @@ else localStorage.removeItem("djhub_dj_profile");
 
 if (venueData) localStorage.setItem("djhub_venue_profile", JSON.stringify(venueData));
 else localStorage.removeItem("djhub_venue_profile");
+};
+
+const fetchProfileSummary = async (accessToken: string | null | undefined) => {
+if (!accessToken) {
+return {
+isAdmin: false,
+djProfile: null,
+venueProfile: null,
+};
+}
+
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), PROFILE_TIMEOUT_MS);
+
+try {
+const response = await fetch(`${API_URL}/api/me/profile-summary`, {
+headers: {
+Authorization: `Bearer ${accessToken}`,
+},
+signal: controller.signal,
+});
+
+if (!response.ok) {
+throw new Error(`profile-summary responded with ${response.status}`);
+}
+
+const payload = await response.json() as {
+ok?: boolean;
+data?: {
+isAdmin?: boolean;
+djProfile?: unknown;
+venueProfile?: unknown;
+};
+isAdmin?: boolean;
+djProfile?: unknown;
+venueProfile?: unknown;
+error?: string;
+};
+
+if (payload && "ok" in payload && !payload.ok) {
+throw new Error(payload?.error || "profile-summary failed");
+}
+
+const summaryData =
+  payload && typeof payload === "object" && "data" in payload && payload.data
+    ? payload.data
+    : payload;
+
+return {
+isAdmin: !!summaryData?.isAdmin,
+djProfile: summaryData?.djProfile ?? null,
+venueProfile: summaryData?.venueProfile ?? null,
+};
+} finally {
+clearTimeout(timeoutId);
+}
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -88,7 +145,7 @@ syncProfileToLocalStorage(djProfile, nextVenue);
 schedulePrivateWarmup(djProfile, nextVenue);
 };
 
-const loadUserData = async (currentUser: User | null) => {
+const loadUserData = async (currentUser: User | null, accessToken?: string | null) => {
 if (!currentUser) {
 setUser(null);
 setIsAdmin(false);
@@ -103,37 +160,18 @@ setUser(currentUser);
 setProfilesLoading(true);
 
 try {
-const [adminRes, djRes, venueRes] = await withTimeout(
-Promise.all([
-supabase
-.from("user_roles")
-.select("role")
-.eq("user_id", currentUser.id)
-.eq("role", "admin")
-.maybeSingle(),
-
-supabase
-.from("dj_profiles")
-.select("*")
-.eq("user_id", currentUser.id)
-.maybeSingle(),
-
-supabase
-.from("venue_profiles")
-.select("*")
-.eq("user_id", currentUser.id)
-.maybeSingle(),
-]),
+const summary = await withTimeout(
+fetchProfileSummary(accessToken),
 PROFILE_TIMEOUT_MS,
 "loadUserData"
 );
 
-setIsAdmin(!!adminRes.data);
+setIsAdmin(!!summary.isAdmin);
 
-const dj = mapDjFromDb(djRes.data);
+const dj = mapDjFromDb(summary.djProfile);
 const djForUi = mapDjToLocalStorage(dj) as DjProfile | null;
 
-const venue = mapVenueFromDb(venueRes.data);
+const venue = mapVenueFromDb(summary.venueProfile);
 const venueForUi = mapVenueToLocalStorage(venue) as VenueProfile | null;
 
 setDjProfile(djForUi);
@@ -167,12 +205,13 @@ data: { session },
 if (!mounted) return;
 
 const currentUser = session?.user ?? null;
+const accessToken = session?.access_token ?? null;
 
 initializedRef.current = true;
 schedulePublicWarmup();
 
 // ВАЖНО: ждём профиль ДО отключения loading
-await loadUserData(currentUser);
+await loadUserData(currentUser, accessToken);
 } catch (error) {
 if (!mounted) return;
 
@@ -196,7 +235,7 @@ const {
 data: { subscription },
 } = supabase.auth.onAuthStateChange((_event, session) => {
 if (!initializedRef.current) return;
-void loadUserData(session?.user ?? null);
+void loadUserData(session?.user ?? null, session?.access_token ?? null);
 });
 
 return () => {
@@ -226,28 +265,22 @@ if (!user) return;
 setProfilesLoading(true);
 
 try {
-const [djRes, venueRes] = await withTimeout(
-Promise.all([
-supabase
-.from("dj_profiles")
-.select("*")
-.eq("user_id", user.id)
-.maybeSingle(),
+const {
+data: { session },
+} = await withTimeout(supabase.auth.getSession(), AUTH_TIMEOUT_MS, "getSession");
 
-supabase
-.from("venue_profiles")
-.select("*")
-.eq("user_id", user.id)
-.maybeSingle(),
-]),
+const summary = await withTimeout(
+fetchProfileSummary(session?.access_token ?? null),
 PROFILE_TIMEOUT_MS,
 "refreshProfiles"
 );
 
-const dj = mapDjFromDb(djRes.data);
+setIsAdmin(!!summary.isAdmin);
+
+const dj = mapDjFromDb(summary.djProfile);
 const djForUi = mapDjToLocalStorage(dj) as DjProfile | null;
 
-const venue = mapVenueFromDb(venueRes.data);
+const venue = mapVenueFromDb(summary.venueProfile);
 const venueForUi = mapVenueToLocalStorage(venue) as VenueProfile | null;
 
 setDjProfile(djForUi);

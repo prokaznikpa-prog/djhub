@@ -16,6 +16,7 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
 const CACHE_TTL = 5 * 60 * 1000;
 const POSTS_CACHE_TTL = 10 * 1000;
+const PROFILE_SUMMARY_TIMEOUT_MS = 4500;
 
 const djsCache = {
 data: null,
@@ -47,6 +48,37 @@ autoRefreshToken: false,
 });
 
 app.use(express.json());
+
+function getBearerToken(req) {
+const header = req.headers.authorization;
+
+if (!header || typeof header !== "string") return null;
+
+const match = header.match(/^Bearer\s+(.+)$/i);
+return match?.[1] ?? null;
+}
+
+function getProfileSummaryFallback() {
+return {
+isAdmin: false,
+djProfile: null,
+venueProfile: null,
+};
+}
+
+async function withTimeout(promise, ms, label) {
+let timeoutId;
+
+const timeoutPromise = new Promise((_, reject) => {
+timeoutId = setTimeout(() => reject(new Error(`${label} timeout`)), ms);
+});
+
+try {
+return await Promise.race([promise, timeoutPromise]);
+} finally {
+clearTimeout(timeoutId);
+}
+}
 
 app.get("/health", (_req, res) => {
 res.json({ ok: true });
@@ -259,6 +291,58 @@ throw error;
 return data ?? [];
 }
 
+async function fetchProfileSummaryFromSupabase(accessToken) {
+if (!accessToken) {
+return getProfileSummaryFallback();
+}
+
+const {
+data: { user },
+error: userError,
+} = await withTimeout(
+supabase.auth.getUser(accessToken),
+PROFILE_SUMMARY_TIMEOUT_MS,
+"profile-summary getUser"
+);
+
+if (userError || !user) {
+throw userError ?? new Error("Unable to resolve user from token");
+}
+
+const [adminRes, djRes, venueRes] = await withTimeout(
+Promise.all([
+supabase
+.from("user_roles")
+.select("role")
+.eq("user_id", user.id)
+.eq("role", "admin")
+.maybeSingle(),
+supabase
+.from("dj_profiles")
+.select("*")
+.eq("user_id", user.id)
+.maybeSingle(),
+supabase
+.from("venue_profiles")
+.select("*")
+.eq("user_id", user.id)
+.maybeSingle(),
+]),
+PROFILE_SUMMARY_TIMEOUT_MS,
+"profile-summary queries"
+);
+
+if (adminRes.error) throw adminRes.error;
+if (djRes.error) throw djRes.error;
+if (venueRes.error) throw venueRes.error;
+
+return {
+isAdmin: !!adminRes.data,
+djProfile: djRes.data ?? null,
+venueProfile: venueRes.data ?? null,
+};
+}
+
 function isFresh(cache) {
 return cache.data && cache.expiresAt > Date.now();
 }
@@ -460,6 +544,32 @@ error: error?.message ?? "Unknown proxy error",
 }
 
 console.timeEnd("api/profiles/:id/reviews");
+});
+
+app.get("/api/me/profile-summary", async (req, res) => {
+const label = "api/me/profile-summary";
+console.time(label);
+
+const accessToken = getBearerToken(req);
+
+if (!accessToken) {
+res.json({
+ok: true,
+data: getProfileSummaryFallback(),
+});
+console.timeEnd(label);
+return;
+}
+
+try {
+const data = await fetchProfileSummaryFromSupabase(accessToken);
+res.json({ ok: true, data });
+} catch (error) {
+console.warn("[proxy] profile-summary fallback", error?.message ?? error);
+res.json({ ok: true, data: getProfileSummaryFallback() });
+}
+
+console.timeEnd(label);
 });
 
 app.listen(port, () => {
