@@ -12,6 +12,9 @@ export {
 };
 export type { ReviewRatingSummary };
 
+const API_URL = import.meta.env.VITE_API_URL;
+const REVIEWS_TIMEOUT_MS = 6000;
+
 export type ReviewRow = {
   id: string;
   booking_id: string;
@@ -21,6 +24,41 @@ export type ReviewRow = {
   comment: string | null;
   created_at: string;
 };
+
+async function fetchProfileReviewsFromBackend(profileId: string): Promise<ReviewRow[]> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REVIEWS_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_URL}/api/profiles/${profileId}/reviews`, {
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend responded with ${response.status}`);
+    }
+
+    const payload = await response.json() as ReviewRow[] | { ok?: boolean; data?: ReviewRow[]; error?: string };
+
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    if (payload?.ok && Array.isArray(payload.data)) {
+      return payload.data;
+    }
+
+    return [];
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return [];
+    }
+
+    return [];
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 export function useReviewsForProfile(profileId: string | undefined) {
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
@@ -34,12 +72,8 @@ export function useReviewsForProfile(profileId: string | undefined) {
     }
 
     setLoading(true);
-    const { data } = await (supabase as any)
-      .from("reviews")
-      .select("*")
-      .eq("target_id", profileId)
-      .order("created_at", { ascending: false });
-    setReviews((data as ReviewRow[] | null) ?? []);
+    const data = await fetchProfileReviewsFromBackend(profileId);
+    setReviews(data);
     setLoading(false);
   };
 

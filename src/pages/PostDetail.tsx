@@ -1,72 +1,168 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { createApplication, checkApplied } from "@/domains/applications/applications.hooks";
 import { createNotification } from "@/domains/notifications/notifications.hooks";
 import type { VenuePost } from "@/domains/posts/posts.hooks";
 import { GIG_STATUS_LABEL, getGigTypeBadgeClass, getGigTypeLabel, isOpenGig } from "@/lib/gigs";
 import { getCityLabel } from "@/lib/geography";
-import { ArrowLeft, MapPin, Clock, Music, Calendar, Briefcase, Send, Tag } from "lucide-react";
+import { ArrowLeft, MapPin, Clock, Calendar, Briefcase, Send, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { cachedRequest, getCachedValue, setCachedValue } from "@/lib/requestCache";
+
+const API_URL = import.meta.env.VITE_API_URL;
+const POST_DETAIL_TIMEOUT_MS = 8000;
+
+type PostDetailPayload = VenuePost & {
+  venue_profiles?: {
+    name?: string | null;
+    user_id?: string | null;
+    image_url?: string | null;
+  } | null;
+};
+
+async function fetchPostDetailFromBackend(id: string): Promise<PostDetailPayload | null> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), POST_DETAIL_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_URL}/api/posts/${id}`, {
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend responded with ${response.status}`);
+    }
+
+    const payload = await response.json() as
+      | PostDetailPayload
+      | { ok?: boolean; data?: PostDetailPayload | null; error?: string };
+
+    if (payload && typeof payload === "object" && "ok" in payload) {
+      if (!payload.ok) {
+        throw new Error(payload.error || "Не удалось загрузить публикацию");
+      }
+
+      return payload.data ?? null;
+    }
+
+    return (payload ?? null) as PostDetailPayload | null;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Сервер долго отвечает. Попробуйте обновить страницу.");
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 const PostDetail = () => {
   const { id } = useParams();
   const { user, djProfile } = useAuth();
-  const cachedPost = id ? getCachedValue<(VenuePost & { venue_profiles?: { name?: string | null; user_id?: string | null; image_url?: string | null } | null })>(`post:${id}`) : null;
+  const cachedPost = id ? getCachedValue<PostDetailPayload>(`post:${id}`) : null;
   const [post, setPost] = useState<VenuePost | null>(() => cachedPost);
   const [venueName, setVenueName] = useState(() => cachedPost?.venue_profiles?.name ?? "");
   const [venueImage, setVenueImage] = useState<string | null>(() => cachedPost?.venue_profiles?.image_url ?? null);
   const [venueUserId, setVenueUserId] = useState<string | null>(() => cachedPost?.venue_profiles?.user_id ?? null);
   const [applied, setApplied] = useState(false);
   const [loading, setLoading] = useState(() => !cachedPost);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
+
+    let active = true;
+
     const fetchData = async () => {
       const cacheKey = `post:${id}`;
-      const cached = getCachedValue<(VenuePost & { venue_profiles?: { name?: string | null; user_id?: string | null; image_url?: string | null } | null })>(cacheKey);
+      const cached = getCachedValue<PostDetailPayload>(cacheKey);
+
       if (cached) {
         setPost(cached);
         setVenueName(cached.venue_profiles?.name ?? "");
         setVenueImage(cached.venue_profiles?.image_url ?? null);
         setVenueUserId(cached.venue_profiles?.user_id ?? null);
+        setErrorMessage(null);
         setLoading(false);
       }
-      const data = await cachedRequest<(VenuePost & { venue_profiles?: { name?: string | null; user_id?: string | null; image_url?: string | null } | null }) | null>(cacheKey, async () => {
-        const { data, error } = await supabase.from("venue_posts").select("*, venue_profiles(name, user_id, image_url)").eq("id", id).single();
-        if (error) {
-          console.error("Failed to load post", error);
-          return null;
+
+      try {
+        const data = await cachedRequest<PostDetailPayload | null>(cacheKey, async () => {
+          return fetchPostDetailFromBackend(id);
+        });
+
+        if (!active) return;
+
+        if (data) {
+          setCachedValue(cacheKey, data);
+          setPost(data);
+          setVenueName(data.venue_profiles?.name ?? "");
+          setVenueImage(data.venue_profiles?.image_url ?? null);
+          setVenueUserId(data.venue_profiles?.user_id ?? null);
+          setErrorMessage(null);
+        } else {
+          setPost(null);
+          setVenueName("");
+          setVenueImage(null);
+          setVenueUserId(null);
+          setErrorMessage("Публикация не найдена");
         }
-        return data as any;
-      });
-      if (data) {
-        setCachedValue(cacheKey, data as any);
-        setPost(data as any);
-        setVenueName((data as any).venue_profiles?.name ?? "");
-        setVenueImage((data as any).venue_profiles?.image_url ?? null);
-        setVenueUserId((data as any).venue_profiles?.user_id ?? null);
+
+        if (djProfile && data) {
+          const isApplied = await checkApplied(djProfile.id, id);
+
+          if (!active) return;
+
+          setApplied(isApplied);
+        }
+      } catch (error) {
+        if (!active) return;
+
+        console.error("Failed to load post", error);
+        setErrorMessage(error instanceof Error ? error.message : "Не удалось загрузить публикацию");
+
+        if (!cached) {
+          setPost(null);
+          setVenueName("");
+          setVenueImage(null);
+          setVenueUserId(null);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-      if (djProfile && data) {
-        const isApplied = await checkApplied(djProfile.id, id);
-        setApplied(isApplied);
-      }
-      setLoading(false);
     };
-    fetchData();
+
+    void fetchData();
+
+    return () => {
+      active = false;
+    };
   }, [id, djProfile?.id]);
 
-  if (loading) return <div className="min-h-screen pt-20 flex items-center justify-center"><p className="text-muted-foreground text-sm">Загрузка...</p></div>;
-  if (!post) return (
-    <div className="min-h-screen pt-20 flex items-center justify-center">
-      <div className="text-center space-y-3">
-        <p className="text-muted-foreground">Публикация не найдена</p>
-        <Link to="/posts" className="text-sm text-primary hover:underline">← Назад</Link>
+  if (loading) {
+    return (
+      <div className="min-h-screen pt-20 flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">Загрузка...</p>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (!post) {
+    return (
+      <div className="min-h-screen pt-20 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <p className="text-muted-foreground">{errorMessage ?? "Публикация не найдена"}</p>
+          <Link to="/posts" className="text-sm text-primary hover:underline">
+            ← Назад
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const isClosed = !isOpenGig(post);
   const displayDate = post.event_date ?? post.deadline ?? null;
@@ -81,12 +177,15 @@ const PostDetail = () => {
       return;
     }
     if (applied) return;
+
     const { error, alreadyApplied } = await createApplication(djProfile.id, post.id);
+
     if (alreadyApplied) {
       toast.error("Вы уже откликнулись");
       setApplied(true);
       return;
     }
+
     if (error) {
       if (error.message.includes("duplicate")) {
         toast.error("Вы уже откликнулись");
@@ -96,22 +195,32 @@ const PostDetail = () => {
       }
       return;
     }
+
     setApplied(true);
     toast.success("Отклик отправлен!");
 
-    // Create notifications
     await createNotification(user.id, "application", `Вы откликнулись на "${post.title}"`, post.id);
+
     if (venueUserId) {
-      await createNotification(venueUserId, "application", `Новый отклик от ${djProfile.name} на "${post.title}"`, post.id);
+      await createNotification(
+        venueUserId,
+        "application",
+        `Новый отклик от ${djProfile.name} на "${post.title}"`,
+        post.id,
+      );
     }
   };
 
   return (
     <div className="min-h-screen pt-20 pb-12">
       <div className="container mx-auto max-w-2xl px-4">
-        <Link to="/posts" className="mb-6 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <Link
+          to="/posts"
+          className="mb-6 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-background/35 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
           <ArrowLeft className="h-4 w-4" /> Назад
         </Link>
+
         <div className="premium-surface overflow-hidden">
           <div className="p-6 space-y-4">
             <div className="flex items-center justify-between">
@@ -120,7 +229,11 @@ const PostDetail = () => {
                 <span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${getGigTypeBadgeClass(post.post_type)}`}>
                   {getGigTypeLabel(post.post_type)}
                 </span>
-                <span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${isClosed ? "border border-white/10 bg-white/5 text-muted-foreground" : "bg-primary/15 text-primary"}`}>
+                <span
+                  className={`text-xs font-semibold rounded-full px-2.5 py-1 ${
+                    isClosed ? "border border-white/10 bg-white/5 text-muted-foreground" : "bg-primary/15 text-primary"
+                  }`}
+                >
                   {isClosed ? GIG_STATUS_LABEL.closed : GIG_STATUS_LABEL.open}
                 </span>
               </div>
@@ -140,19 +253,46 @@ const PostDetail = () => {
               </div>
             </div>
 
-            <div className="flex min-w-0 items-center gap-2.5 text-muted-foreground"><MapPin className="h-4 w-4 shrink-0" /> <span className="min-w-0 truncate">{getCityLabel(post.city)}</span></div>
+            <div className="flex min-w-0 items-center gap-2.5 text-muted-foreground">
+              <MapPin className="h-4 w-4 shrink-0" /> <span className="min-w-0 truncate">{getCityLabel(post.city)}</span>
+            </div>
 
             <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-4 text-sm">
-              {displayDate && <div className="premium-row p-3 text-muted-foreground"><Calendar className="mb-1 h-4 w-4 text-primary" /><span>{displayDate}</span></div>}
-              {post.start_time && <div className="premium-row p-3 text-muted-foreground"><Clock className="mb-1 h-4 w-4 text-primary" /><span>{post.start_time}{post.duration ? ` · ${post.duration}` : ""}</span></div>}
-              {post.budget && <div className="rounded-xl border border-primary/25 bg-primary/10 p-3 font-mono text-primary"><Tag className="mb-1 h-4 w-4" /><span>{post.budget}</span></div>}
-              {post.frequency && <div className="premium-row p-3 text-muted-foreground"><Briefcase className="mb-1 h-4 w-4 text-primary" /><span>{post.frequency}</span></div>}
+              {displayDate && (
+                <div className="premium-row p-3 text-muted-foreground">
+                  <Calendar className="mb-1 h-4 w-4 text-primary" />
+                  <span>{displayDate}</span>
+                </div>
+              )}
+              {post.start_time && (
+                <div className="premium-row p-3 text-muted-foreground">
+                  <Clock className="mb-1 h-4 w-4 text-primary" />
+                  <span>
+                    {post.start_time}
+                    {post.duration ? ` · ${post.duration}` : ""}
+                  </span>
+                </div>
+              )}
+              {post.budget && (
+                <div className="rounded-xl border border-primary/25 bg-primary/10 p-3 font-mono text-primary">
+                  <Tag className="mb-1 h-4 w-4" />
+                  <span>{post.budget}</span>
+                </div>
+              )}
+              {post.frequency && (
+                <div className="premium-row p-3 text-muted-foreground">
+                  <Briefcase className="mb-1 h-4 w-4 text-primary" />
+                  <span>{post.frequency}</span>
+                </div>
+              )}
             </div>
 
             {post.music_styles.length > 0 && (
               <div className="flex flex-wrap gap-2 pt-2">
-                {post.music_styles.map((s) => (
-                  <span key={s} className="premium-chip">{s}</span>
+                {post.music_styles.map((style) => (
+                  <span key={style} className="premium-chip">
+                    {style}
+                  </span>
                 ))}
               </div>
             )}
@@ -177,13 +317,20 @@ const PostDetail = () => {
 
             <div className="flex gap-3 pt-2">
               {isClosed ? (
-                <div className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 text-center text-sm font-medium text-muted-foreground">Набор завершён</div>
+                <div className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 text-center text-sm font-medium text-muted-foreground">
+                  Набор завершён
+                </div>
               ) : !user ? (
-                <Link to="/signup" className="btn-glow flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-center text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
+                <Link
+                  to="/signup"
+                  className="btn-glow flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-center text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                >
                   <Send className="h-4 w-4" /> Войдите, чтобы откликнуться
                 </Link>
               ) : !djProfile ? (
-                <div className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 text-center text-sm text-muted-foreground">Только DJ могут откликаться</div>
+                <div className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 text-center text-sm text-muted-foreground">
+                  Только DJ могут откликаться
+                </div>
               ) : applied ? (
                 <div className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 py-2.5 text-center text-sm font-medium text-primary">
                   <Send className="h-4 w-4" /> Вы уже откликнулись

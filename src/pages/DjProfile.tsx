@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useReviewsForProfile } from "@/domains/reviews/reviews.hooks";
 import InviteDjModal from "@/components/InviteDjModal";
@@ -9,9 +8,50 @@ import type { Tables } from "@/integrations/supabase/types";
 import { getCityLabel } from "@/lib/geography";
 import { getDjAvailabilityLabel } from "@/lib/djOptions";
 import { getDjExperienceLabel } from "@/lib/djOptions";
-import { getCachedValue, setCachedValue } from "@/lib/requestCache";
+import { cachedRequest, getCachedValue, setCachedValue } from "@/lib/requestCache";
 import { getDjImage } from "@/lib/image-fallback";
 import VerificationBadge, { getVerificationKind } from "@/components/VerificationBadge";
+
+const API_URL = import.meta.env.VITE_API_URL;
+const DJ_PROFILE_TIMEOUT_MS = 6000;
+
+async function fetchDjProfileFromBackend(id: string): Promise<Tables<"dj_profiles"> | null> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), DJ_PROFILE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_URL}/api/djs/${id}`, {
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend responded with ${response.status}`);
+    }
+
+    const payload = await response.json() as
+      | Tables<"dj_profiles">
+      | { ok?: boolean; data?: Tables<"dj_profiles"> | null; error?: string };
+
+    if (payload && typeof payload === "object" && "ok" in payload) {
+      if (!payload.ok) {
+        throw new Error(payload.error || "Не удалось загрузить DJ профиль");
+      }
+
+      return payload.data ?? null;
+    }
+
+    return (payload ?? null) as Tables<"dj_profiles"> | null;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Сервер долго отвечает. Попробуйте обновить страницу.");
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 const DjProfile = () => {
   const { id } = useParams();
   const { venueProfile } = useAuth();
@@ -29,17 +69,41 @@ const DjProfile = () => {
 
   useEffect(() => {
     if (!id) return;
+
+    let active = true;
     const cacheKey = `dj:${id}`;
     const cached = getCachedValue<Tables<"dj_profiles">>(cacheKey);
     if (cached?.status === "active") {
       setDj(cached);
       setLoading(false);
     }
-    supabase.from("dj_profiles").select("*").eq("id", id).eq("status", "active").maybeSingle().then(({ data }) => {
-      if (data) setCachedValue(cacheKey, data);
-      setDj(data);
-      setLoading(false);
-    });
+
+    cachedRequest<Tables<"dj_profiles"> | null>(cacheKey, async () => {
+      return fetchDjProfileFromBackend(id);
+    })
+      .then((data) => {
+        if (!active) return;
+
+        if (data?.status === "active") {
+          setCachedValue(cacheKey, data);
+          setDj(data);
+        } else {
+          setDj(null);
+        }
+
+        setLoading(false);
+      })
+      .catch((error) => {
+        if (!active) return;
+
+        console.error("Failed to load DJ profile", error);
+        setDj(cached?.status === "active" ? cached : null);
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   if (loading) return <div className="min-h-screen pt-20 flex items-center justify-center"><p className="text-muted-foreground text-sm">Загрузка...</p></div>;

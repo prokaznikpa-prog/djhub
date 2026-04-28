@@ -21,7 +21,6 @@ const Navbar = () => {
   const [showNotifs, setShowNotifs] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -68,8 +67,6 @@ const Navbar = () => {
   };
 
   const handleSignOut = async () => {
-    if (signingOut) return;
-    setSigningOut(true);
     await signOut();
     localStorage.removeItem("djhub_dj_profile");
     localStorage.removeItem("djhub_venue_profile");
@@ -245,13 +242,11 @@ const Navbar = () => {
 
               <button
                 onClick={handleSignOut}
-                disabled={signingOut}
-                className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg px-2 py-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                 title="Выйти"
                 type="button"
               >
                 <LogOut className="h-4 w-4 shrink-0" />
-                {signingOut && <span className="text-xs font-medium">Выходим...</span>}
               </button>
             </>
           ) : (
@@ -351,11 +346,10 @@ const Navbar = () => {
           {user ? (
             <button
               onClick={handleSignOut}
-              disabled={signingOut}
-              className="block w-full rounded-lg px-3 py-3 text-left text-sm font-medium text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+              className="block w-full rounded-lg px-3 py-3 text-left text-sm font-medium text-destructive"
               type="button"
             >
-              {signingOut ? "Выходим..." : "Выйти"}
+              Выйти
             </button>
           ) : (
             <Link to="/login" className="block rounded-lg px-3 py-3 text-sm font-medium text-muted-foreground">

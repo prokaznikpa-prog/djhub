@@ -11,7 +11,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       position="bottom-right"
       offset={16}
-      richColors
       expand={false}
       closeButton
       className="toaster group"

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useVenuePostsByVenue } from "@/domains/posts/posts.hooks";
 import { useReviewsForProfile } from "@/domains/reviews/reviews.hooks";
 import { MapPin, ArrowLeft, Disc, Utensils, Star, ExternalLink } from "lucide-react";
@@ -16,6 +15,46 @@ import {
 } from "@/lib/venueOptions";
 import { getCachedValue, setCachedValue } from "@/lib/requestCache";
 import VerificationBadge, { getVerificationKind } from "@/components/VerificationBadge";
+
+const API_URL = import.meta.env.VITE_API_URL;
+const VENUE_PROFILE_TIMEOUT_MS = 6000;
+
+async function fetchVenueProfileFromBackend(id: string): Promise<Tables<"venue_profiles"> | null> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), VENUE_PROFILE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_URL}/api/venues/${id}`, {
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend responded with ${response.status}`);
+    }
+
+    const payload = await response.json() as
+      | Tables<"venue_profiles">
+      | { ok?: boolean; data?: Tables<"venue_profiles"> | null; error?: string };
+
+    if (payload && typeof payload === "object" && "ok" in payload) {
+      if (!payload.ok) {
+        throw new Error(payload.error || "Не удалось загрузить профиль заведения");
+      }
+
+      return payload.data ?? null;
+    }
+
+    return (payload ?? null) as Tables<"venue_profiles"> | null;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Сервер долго отвечает. Попробуйте обновить страницу.");
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 const VenueProfile = () => {
   const { id } = useParams();
@@ -51,25 +90,21 @@ const VenueProfile = () => {
         setLoading(true);
       }
 
-      const { data, error } = await supabase
-        .from("venue_profiles")
-        .select("*")
-        .eq("id", id)
-        .eq("status", "active")
-        .maybeSingle();
+      try {
+        const data = await fetchVenueProfileFromBackend(id);
 
-      if (!isMounted) return;
+        if (!isMounted) return;
 
-      if (error) {
-        console.error("Ошибка загрузки venue:", error);
-        setVenue(null);
+        if (data) setCachedValue(cacheKey, data);
+        setVenue(data ?? null);
         setLoading(false);
-        return;
-      }
+      } catch (error) {
+        if (!isMounted) return;
 
-      if (data) setCachedValue(cacheKey, data);
-      setVenue(data ?? null);
-      setLoading(false);
+        console.error("Ошибка загрузки venue:", error);
+        setVenue(cached?.status === "active" ? cached : null);
+        setLoading(false);
+      }
     };
 
     void fetchVenue();

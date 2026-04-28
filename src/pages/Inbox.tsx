@@ -774,7 +774,7 @@ const ChatMessages = memo(({
           }
           stickToBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
         }}
-        className="max-h-[45dvh] min-h-[16rem] overflow-y-auto bg-black/10 px-3 py-3 sm:max-h-[392px] sm:min-h-64 sm:px-4 sm:py-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+        className="h-[22rem] overflow-y-auto bg-black/10 px-3 py-3 sm:h-[392px] sm:px-4 sm:py-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
       >
         {loading ? (
           <p className="text-xs text-muted-foreground">Загружаем сообщения...</p>
@@ -798,9 +798,7 @@ const ChatMessages = memo(({
           {visibleMessages.map((message, index) => {
             const isMine = message.senderId === participant.profileId;
             const previous = visibleMessages[index - 1];
-            const next = visibleMessages[index + 1];
             const startsGroup = !previous || previous.senderId !== message.senderId;
-            const endsGroup = !next || next.senderId !== message.senderId;
             const senderName = resolveSenderLabel(thread, message.senderId);
 
             return (
@@ -809,14 +807,13 @@ const ChatMessages = memo(({
                   {startsGroup && !isMine && (
                     <p className="mb-1 px-1 text-[10px] font-medium text-muted-foreground">{senderName}</p>
                   )}
-                  <div className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
+                  <div className={`rounded-2xl border px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
                     isMine
-                      ? `${startsGroup ? "rounded-tr-2xl" : "rounded-tr-md"} ${endsGroup ? "rounded-br-md" : "rounded-br-2xl"} bg-primary text-primary-foreground`
-                      : `${startsGroup ? "rounded-tl-2xl" : "rounded-tl-md"} ${endsGroup ? "rounded-bl-md" : "rounded-bl-2xl"} border border-white/10 bg-white/10 text-foreground backdrop-blur-xl`
+                      ? "border-primary/30 bg-primary text-primary-foreground"
+                      : "border-white/10 bg-white/10 text-foreground backdrop-blur-xl"
                   }`}>
                   <p className="whitespace-pre-wrap break-words">{message.text}</p>
-                  {endsGroup && (
-                    <div className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] leading-none ${isMine ? "text-primary-foreground/65" : "text-muted-foreground/80"}`}>
+                    <div className={`mt-1.5 flex min-h-[0.75rem] items-center justify-end gap-1 text-[9px] leading-none ${isMine ? "text-primary-foreground/65" : "text-muted-foreground/80"}`}>
                       <span>{formatThreadTime(message.createdAt)}</span>
                       {isMine && (
                         message.readAt ? (
@@ -829,7 +826,6 @@ const ChatMessages = memo(({
                         )
                       )}
                     </div>
-                  )}
                   </div>
                 </div>
               </div>

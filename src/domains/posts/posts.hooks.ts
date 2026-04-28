@@ -26,6 +26,7 @@ export type VenuePostInsert = GigInsert;
 const CACHE_TTL = 90_000;
 const API_URL = import.meta.env.VITE_API_URL;
 const POSTS_PROXY_URL = `${API_URL}/api/posts`;
+const POSTS_TIMEOUT_MS = 6000;
 
 function isMissingColumnError(error: { message?: string } | null | undefined, column: string) {
 return (error?.message?.toLowerCase() ?? "").includes(column.toLowerCase());
@@ -80,45 +81,51 @@ CACHE_TTL,
 );
 }
 
-async function fetchPublicOpenVenuePostsFromSupabase(filters?: {
+async function fetchVenuePostsFromBackend(
+filters?: {
 city?: string;
 style?: string;
 status?: GigStatus;
 postType?: GigType;
 venueId?: string;
-}) {
-const runQuery = async (includeModerationFilter: boolean) => {
-let q = supabase
-.from("venue_posts")
-.select("*, venue_profiles(name, image_url)")
-.order("created_at", { ascending: false });
+},
+forceRefresh = false,
+) {
+const controller = new AbortController();
+const timeoutId = window.setTimeout(() => controller.abort(), POSTS_TIMEOUT_MS);
 
-if (filters?.city) q = q.eq("city", filters.city);
-if (filters?.status) q = q.eq("status", filters.status);
-if (filters?.postType) q = q.eq("post_type", filters.postType);
-if (filters?.venueId) q = q.eq("venue_id", filters.venueId);
-if (includeModerationFilter && !filters?.venueId) q = q.eq("moderation_status", "active");
+try {
+const searchParams = new URLSearchParams();
 
-return q;
-};
+if (filters?.city) searchParams.set("city", filters.city);
+if (filters?.style) searchParams.set("style", filters.style);
+if (filters?.status) searchParams.set("status", filters.status);
+if (filters?.postType) searchParams.set("postType", filters.postType);
+if (filters?.venueId) searchParams.set("venueId", filters.venueId);
+if (forceRefresh) searchParams.set("ts", String(Date.now()));
 
-let { data, error } = await runQuery(true);
+const url = searchParams.size > 0 ? `${POSTS_PROXY_URL}?${searchParams.toString()}` : POSTS_PROXY_URL;
+const response = await fetch(url, { signal: controller.signal });
 
-if (error && isMissingColumnError(error, "moderation_status")) {
-const fallback = await runQuery(false);
-data = fallback.data;
-error = fallback.error;
+if (!response.ok) {
+throw new Error(`Proxy responded with ${response.status}`);
 }
 
-if (error) return [];
+const payload = await response.json() as VenuePost[] | { ok?: boolean; data?: VenuePost[] };
 
-let result = data ?? [];
+const proxyPosts = Array.isArray(payload)
+? payload
+: payload?.ok && Array.isArray(payload.data)
+? payload.data
+: [];
 
-if (filters?.style) {
-result = result.filter((p) => p.music_styles.includes(filters.style!));
+return proxyPosts;
+} catch (error) {
+console.warn("Venue posts backend fetch failed", error);
+return [];
+} finally {
+window.clearTimeout(timeoutId);
 }
-
-return result;
 }
 
 async function fetchPublicOpenVenuePostsProxyFirst(
@@ -131,37 +138,7 @@ venueId?: string;
 },
 forceRefresh = false,
 ) {
-try {
-const response = await fetch(forceRefresh ? `${POSTS_PROXY_URL}?ts=${Date.now()}` : POSTS_PROXY_URL);
-
-if (!response.ok) {
-throw new Error(`Proxy responded with ${response.status}`);
-}
-
-const payload = await response.json() as VenuePost[] | { ok?: boolean; data?: VenuePost[] };
-
-const proxyPosts = Array.isArray(payload)
-? payload
-: payload?.ok && Array.isArray(payload.data)
-? payload.data
-: null;
-
-if (!proxyPosts) {
-throw new Error("Proxy returned unexpected venue posts payload");
-}
-
-let result = proxyPosts;
-
-if (filters?.city) result = result.filter((post) => post.city === filters.city);
-if (filters?.status) result = result.filter((post) => post.status === filters.status);
-if (filters?.postType) result = result.filter((post) => post.post_type === filters.postType);
-if (filters?.style) result = result.filter((post) => post.music_styles.includes(filters.style));
-
-return result;
-} catch (error) {
-console.warn("Venue posts proxy failed, falling back to Supabase", error);
-return fetchPublicOpenVenuePostsFromSupabase(filters);
-}
+return fetchVenuePostsFromBackend(filters, forceRefresh);
 }
 
 async function getVenuePostCurrentRound(postId: string) {
@@ -206,13 +183,7 @@ if (!opts?.silent) setLoading(true);
 console.time("posts load");
 
 const request = async () => {
-const shouldUseProxy = !filters?.venueId && (filters?.status ?? "open") === "open";
-
-if (shouldUseProxy) {
 return fetchPublicOpenVenuePostsProxyFirst(filters, !!opts?.forceRefresh);
-}
-
-return fetchPublicOpenVenuePostsFromSupabase(filters);
 };
 
 const result = opts?.force || opts?.forceRefresh
@@ -296,13 +267,7 @@ return;
 if (!opts?.silent) setLoading(true);
 
 const request = async () => {
-const { data } = await supabase
-.from("venue_posts")
-.select("*")
-.eq("venue_id", venueId)
-.order("created_at", { ascending: false });
-
-return data ?? [];
+return fetchVenuePostsFromBackend({ venueId }, false);
 };
 
 const data = opts?.force ? await request() : await cachedRequest(cacheKey, request, CACHE_TTL);
