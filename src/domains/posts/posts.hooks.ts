@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+﻿import { useEffect, useRef, useState } from "react";
 import type { Gig, GigInsert, GigStatus, GigType } from "@/lib/gigs";
+import { supabase } from "@/integrations/supabase/client";
 import { getVenuePostSelection } from "@/domains/applications/applications.hooks";
 import { cachedRequest, getCacheSnapshot, patchCachedListsWhere, setCachedValue } from "@/lib/requestCache";
 import {
@@ -26,37 +26,105 @@ export type VenuePostInsert = GigInsert;
 const CACHE_TTL = 90_000;
 const API_URL = import.meta.env.VITE_API_URL;
 const POSTS_PROXY_URL = `${API_URL}/api/posts`;
-const POSTS_TIMEOUT_MS = 6000;
+const VENUE_POSTS_PROXY_URL = `${API_URL}/api/venue-posts`;
+const POSTS_TIMEOUT_MS = 3000;
+
+async function getAuthHeaders() {
+const {
+  data: { session },
+} = await supabase.auth.getSession();
+
+return session?.access_token
+  ? { Authorization: `Bearer ${session.access_token}` }
+  : {};
+}
 
 function isMissingColumnError(error: { message?: string } | null | undefined, column: string) {
 return (error?.message?.toLowerCase() ?? "").includes(column.toLowerCase());
 }
 
+async function fetchJson<T>(url: string, init: RequestInit | undefined, fallback: T): Promise<T> {
+const controller = new AbortController();
+const timeoutId = window.setTimeout(() => controller.abort(), POSTS_TIMEOUT_MS);
+
+try {
+const authHeaders = await getAuthHeaders();
+const response = await fetch(url, {
+  ...init,
+  signal: controller.signal,
+  headers: {
+    "Content-Type": "application/json",
+    ...authHeaders,
+    ...(init?.headers ?? {}),
+  },
+});
+
+if (!response.ok) {
+  const payload = await response.json().catch(() => null) as { error?: string } | null;
+  console.error("Posts backend request failed", {
+    url,
+    method: init?.method ?? "GET",
+    status: response.status,
+    error: payload?.error ?? null,
+    body: init?.body ?? null,
+  });
+  return fallback;
+}
+
+const payload = await response.json() as { ok?: boolean; data?: T; error?: string };
+if (!payload?.ok) {
+  console.error("Posts backend returned error payload", {
+    url,
+    method: init?.method ?? "GET",
+    error: payload?.error ?? null,
+    body: init?.body ?? null,
+  });
+  return fallback;
+}
+
+return payload.data ?? fallback;
+} catch (error) {
+console.error("Posts backend request error", {
+  url,
+  method: init?.method ?? "GET",
+  error,
+  body: init?.body ?? null,
+});
+return fallback;
+} finally {
+window.clearTimeout(timeoutId);
+}
+}
+
+function toQuery(params: Record<string, string | number | undefined>) {
+const searchParams = new URLSearchParams();
+
+Object.entries(params).forEach(([key, value]) => {
+  if (value !== undefined && value !== null && value !== "") {
+    searchParams.set(key, String(value));
+  }
+});
+
+const query = searchParams.toString();
+return query ? `?${query}` : "";
+}
+
 export async function getPostModerationState(postId: string) {
-const withModeration = await supabase
-.from("venue_posts")
-.select("id, status, application_round, venue_id, moderation_status")
-.eq("id", postId)
-.maybeSingle();
+const posts = await fetchVenuePostsFromBackend({ id: postId });
+const post = posts[0] as (VenuePost & { application_round?: number | null; moderation_status?: string | null }) | undefined;
 
-if (!withModeration.error) {
-return { data: withModeration.data as any, error: null };
+if (!post) {
+return { data: null, error: null };
 }
-
-if (!isMissingColumnError(withModeration.error, "moderation_status")) {
-return { data: null, error: withModeration.error };
-}
-
-const fallback = await supabase
-.from("venue_posts")
-.select("id, status, application_round, venue_id")
-.eq("id", postId)
-.maybeSingle();
-
-if (fallback.error) return { data: null, error: fallback.error };
 
 return {
-data: fallback.data ? { ...(fallback.data as any), moderation_status: "active" } : null,
+data: {
+id: post.id,
+status: post.status,
+application_round: post.application_round ?? 1,
+venue_id: post.venue_id,
+moderation_status: normalizePostModerationStatus(post.moderation_status),
+},
 error: null,
 };
 }
@@ -83,6 +151,7 @@ CACHE_TTL,
 
 async function fetchVenuePostsFromBackend(
 filters?: {
+id?: string;
 city?: string;
 style?: string;
 status?: GigStatus;
@@ -97,6 +166,7 @@ const timeoutId = window.setTimeout(() => controller.abort(), POSTS_TIMEOUT_MS);
 try {
 const searchParams = new URLSearchParams();
 
+if (filters?.id) searchParams.set("id", filters.id);
 if (filters?.city) searchParams.set("city", filters.city);
 if (filters?.style) searchParams.set("style", filters.style);
 if (filters?.status) searchParams.set("status", filters.status);
@@ -104,11 +174,11 @@ if (filters?.postType) searchParams.set("postType", filters.postType);
 if (filters?.venueId) searchParams.set("venueId", filters.venueId);
 if (forceRefresh) searchParams.set("ts", String(Date.now()));
 
-const url = searchParams.size > 0 ? `${POSTS_PROXY_URL}?${searchParams.toString()}` : POSTS_PROXY_URL;
+const url = searchParams.size > 0 ? `${VENUE_POSTS_PROXY_URL}?${searchParams.toString()}` : VENUE_POSTS_PROXY_URL;
 const response = await fetch(url, { signal: controller.signal });
 
 if (!response.ok) {
-throw new Error(`Proxy responded with ${response.status}`);
+return null;
 }
 
 const payload = await response.json() as VenuePost[] | { ok?: boolean; data?: VenuePost[] };
@@ -122,7 +192,7 @@ const proxyPosts = Array.isArray(payload)
 return proxyPosts;
 } catch (error) {
 console.warn("Venue posts backend fetch failed", error);
-return [];
+return null;
 } finally {
 window.clearTimeout(timeoutId);
 }
@@ -130,6 +200,7 @@ window.clearTimeout(timeoutId);
 
 async function fetchPublicOpenVenuePostsProxyFirst(
 filters?: {
+id?: string;
 city?: string;
 style?: string;
 status?: GigStatus;
@@ -142,16 +213,13 @@ return fetchVenuePostsFromBackend(filters, forceRefresh);
 }
 
 async function getVenuePostCurrentRound(postId: string) {
-const { data, error } = await supabase
-.from("venue_posts")
-.select("application_round")
-.eq("id", postId)
-.maybeSingle();
+const posts = await fetchVenuePostsFromBackend({ id: postId });
+const post = posts[0] as (VenuePost & { application_round?: number | null }) | undefined;
 
 return {
-data,
-error,
-round: ((data as any)?.application_round as number | null) ?? 1,
+data: post ? { application_round: post.application_round ?? 1 } : null,
+error: null,
+round: post?.application_round ?? 1,
 };
 }
 
@@ -166,7 +234,13 @@ const cacheKey = `venue-posts:${JSON.stringify(filters ?? {})}`;
 const cacheSnapshot = getCacheSnapshot<VenuePost[]>(cacheKey);
 const [posts, setPosts] = useState<VenuePost[]>(() => cacheSnapshot.value ?? []);
 const [loading, setLoading] = useState(() => !cacheSnapshot.value);
+const [error, setError] = useState<string | null>(null);
 const requestId = useRef(0);
+const postsRef = useRef<VenuePost[]>(cacheSnapshot.value ?? []);
+
+useEffect(() => {
+postsRef.current = posts;
+}, [posts]);
 
 const fetch = async (opts?: { silent?: boolean; force?: boolean; forceRefresh?: boolean }) => {
 const currentRequestId = ++requestId.current;
@@ -174,11 +248,12 @@ const currentRequestId = ++requestId.current;
 if (filters?.status === "closed" && !filters?.venueId) {
 setPosts([]);
 setCachedValue(cacheKey, [] as VenuePost[], CACHE_TTL);
+setError(null);
 setLoading(false);
 return;
 }
 
-if (!opts?.silent) setLoading(true);
+if (!opts?.silent && postsRef.current.length === 0) setLoading(true);
 
 console.time("posts load");
 
@@ -194,6 +269,13 @@ console.timeEnd("posts load");
 
 if (currentRequestId !== requestId.current) return;
 
+if (result === null) {
+setError("Не удалось загрузить публикации");
+setLoading(false);
+return;
+}
+
+setError(null);
 setCachedValue(cacheKey, result, CACHE_TTL);
 setPosts(result);
 setLoading(false);
@@ -204,6 +286,7 @@ const snapshot = getCacheSnapshot<VenuePost[]>(cacheKey);
 
 if (snapshot.value) {
 setPosts(snapshot.value);
+setError(null);
 setLoading(false);
 } else {
 setPosts([]);
@@ -245,7 +328,7 @@ return next;
 });
 };
 
-return { posts, loading, refetch: fetch, addPost, updatePost, removePost };
+return { posts, loading, error, refetch: fetch, addPost, updatePost, removePost };
 }
 
 export function useVenuePostsByVenue(venueId: string | undefined) {
@@ -253,18 +336,25 @@ const cacheKey = `venue-posts-by-venue:${venueId ?? "none"}`;
 const cacheSnapshot = getCacheSnapshot<VenuePost[]>(cacheKey);
 const [posts, setPosts] = useState<VenuePost[]>(() => cacheSnapshot.value ?? []);
 const [loading, setLoading] = useState(() => !cacheSnapshot.value);
+const [error, setError] = useState<string | null>(null);
 const requestId = useRef(0);
+const postsRef = useRef<VenuePost[]>(cacheSnapshot.value ?? []);
+
+useEffect(() => {
+postsRef.current = posts;
+}, [posts]);
 
 const fetch = async (opts?: { force?: boolean; silent?: boolean }) => {
 const currentRequestId = ++requestId.current;
 
 if (!venueId) {
 setPosts([]);
+setError(null);
 setLoading(false);
 return;
 }
 
-if (!opts?.silent) setLoading(true);
+if (!opts?.silent && postsRef.current.length === 0) setLoading(true);
 
 const request = async () => {
 return fetchVenuePostsFromBackend({ venueId }, false);
@@ -274,6 +364,13 @@ const data = opts?.force ? await request() : await cachedRequest(cacheKey, reque
 
 if (currentRequestId !== requestId.current) return;
 
+if (data === null) {
+setError("Не удалось загрузить публикации");
+setLoading(false);
+return;
+}
+
+setError(null);
 setCachedValue(cacheKey, data, CACHE_TTL);
 setPosts(data);
 setLoading(false);
@@ -284,6 +381,7 @@ const snapshot = getCacheSnapshot<VenuePost[]>(cacheKey);
 
 if (snapshot.value) {
 setPosts(snapshot.value);
+setError(null);
 setLoading(false);
 } else {
 setPosts([]);
@@ -323,29 +421,32 @@ return next;
 });
 };
 
-return { posts, loading, refetch: fetch, removePost, addPost, updatePost };
+return { posts, loading, error, refetch: fetch, removePost, addPost, updatePost };
 }
 
 export async function createVenuePost(post: VenuePostInsert) {
-const { data: venue, error: venueError } = await supabase
-.from("venue_profiles")
-.select("status")
-.eq("id", post.venue_id)
-.maybeSingle();
+const venue = await fetchJson<{ status?: string | null } | null>(
+`${API_URL}/api/venue-profile-by-id${toQuery({ id: post.venue_id })}`,
+undefined,
+null,
+);
 
-if (venueError) return { data: null, error: venueError };
+if (!venue) return { data: null, error: new Error("Р СџРЎР‚Р С•РЎвЂћР С‘Р В»РЎРЉ Р В·Р В°Р Р†Р ВµР Т‘Р ВµР Р…Р С‘РЎРЏ Р Р…Р ВµР Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р ВµР Р…") };
 
 if (venue?.status !== "active") {
-return { data: null, error: new Error("Профиль заведения ограничен модератором") };
+return { data: null, error: new Error("РџСЂРѕС„РёР»СЊ Р·Р°РІРµРґРµРЅРёСЏ РѕРіСЂР°РЅРёС‡РµРЅ РјРѕРґРµСЂР°С‚РѕСЂРѕРј") };
 }
 
-const { data, error } = await supabase
-.from("venue_posts")
-.insert(post)
-.select("*, venue_profiles(name, image_url)")
-.single();
+const data = await fetchJson<VenuePost | null>(
+`${API_URL}/api/venue-posts`,
+{
+  method: "POST",
+  body: JSON.stringify(post),
+},
+null,
+);
 
-if (error) return { data: null, error };
+if (!data) return { data: null, error: new Error("Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ РЎРѓР С•Р В·Р Т‘Р В°РЎвЂљРЎРЉ Р С—РЎС“Р В±Р В»Р С‘Р С”Р В°РЎвЂ Р С‘РЎР‹") };
 
 if (data) {
 const createdPost = data as VenuePost;
@@ -366,11 +467,11 @@ if (currentPostError) return { data: null, error: currentPostError };
 const currentVisibility = getPostVisibility(currentPost);
 
 if (currentVisibility.moderationStatus === "blocked") {
-return { data: null, error: new Error("Публикация заблокирована модератором") };
+return { data: null, error: new Error("РџСѓР±Р»РёРєР°С†РёСЏ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅР° РјРѕРґРµСЂР°С‚РѕСЂРѕРј") };
 }
 
 if (currentVisibility.moderationStatus === "archived") {
-return { data: null, error: new Error("Публикация находится в архиве") };
+return { data: null, error: new Error("РџСѓР±Р»РёРєР°С†РёСЏ РЅР°С…РѕРґРёС‚СЃСЏ РІ Р°СЂС…РёРІРµ") };
 }
 
 if (updates.status === "closed") {
@@ -387,17 +488,18 @@ if (engagement.error) return { data: null, error: engagement.error };
 if (engagement.hasEngagement) {
 return {
 data: null,
-error: new Error("Публикацию с откликами, приглашениями, бронями или чатом нельзя закрыть."),
+error: new Error("РџСѓР±Р»РёРєР°С†РёСЋ СЃ РѕС‚РєР»РёРєР°РјРё, РїСЂРёРіР»Р°С€РµРЅРёСЏРјРё, Р±СЂРѕРЅСЏРјРё РёР»Рё С‡Р°С‚РѕРј РЅРµР»СЊР·СЏ Р·Р°РєСЂС‹С‚СЊ."),
 };
 }
 }
 
 if (updates.status === "open") {
-const { data: current } = await supabase
-.from("venue_posts")
-.select("status, application_round")
-.eq("id", id)
-.maybeSingle();
+const currentList = await fetchJson<Array<{ status?: string | null; application_round?: number | null }>>(
+`${API_URL}/api/venue-posts${toQuery({ id })}`,
+undefined,
+[],
+);
+const current = currentList[0] ?? null;
 
 if ((current as any)?.status === "closed") {
 nextUpdates = {
@@ -407,19 +509,21 @@ application_round: (((current as any)?.application_round as number | null) ?? 1)
 }
 }
 
-const { data, error } = await supabase
-.from("venue_posts")
-.update(nextUpdates as any)
-.eq("id", id)
-.select("*")
-.maybeSingle();
+const data = await fetchJson<VenuePost | null>(
+`${API_URL}/api/venue-posts/${id}`,
+{
+  method: "PATCH",
+  body: JSON.stringify(nextUpdates),
+},
+null,
+);
 
-if (error) return { data: null, error };
+if (!data) return { data: null, error: new Error("Р СџРЎС“Р В±Р В»Р С‘Р С”Р В°РЎвЂ Р С‘РЎРЏ Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р В° Р С‘Р В»Р С‘ Р Р…Р ВµР Т‘Р С•РЎРѓРЎвЂљРЎС“Р С—Р Р…Р В° Р Т‘Р В»РЎРЏ Р С•Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘РЎРЏ") };
 
 if (!data) {
 return {
 data: null,
-error: new Error("Публикация не найдена или недоступна для обновления"),
+error: new Error("РџСѓР±Р»РёРєР°С†РёСЏ РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё РЅРµРґРѕСЃС‚СѓРїРЅР° РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ"),
 };
 }
 
@@ -441,37 +545,31 @@ return { error: currentPost.error, hasEngagement: false };
 const currentRound = currentPost.round;
 
 const [applications, invitations, bookings] = await Promise.all([
-supabase
-.from("applications")
-.select("id", { count: "exact", head: true })
-.eq("post_id", id)
-.eq("application_round", currentRound)
-.in("status", ["new", "accepted"]),
+fetchJson<unknown[]>(
+`${API_URL}/api/applications${toQuery({ postId: id, applicationRound: currentRound, status: "new,accepted" })}`,
+undefined,
+[],
+),
 
-supabase
-.from("invitations")
-.select("id", { count: "exact", head: true })
-.eq("post_id", id)
-.eq("application_round", currentRound)
-.in("status", ["new", "accepted"]),
+fetchJson<unknown[]>(
+`${API_URL}/api/invitations${toQuery({ postId: id, applicationRound: currentRound, status: "new,accepted" })}`,
+undefined,
+[],
+),
 
-supabase
-.from("bookings")
-.select("id, applications!inner(application_round)")
-.eq("post_id", id)
-.in("status", ["pending", "confirmed"])
-.eq("applications.application_round", currentRound)
-.limit(1),
+fetchJson<unknown[]>(
+`${API_URL}/api/bookings${toQuery({ postId: id, applicationRound: currentRound, status: "pending,confirmed" })}`,
+undefined,
+[],
+),
 ]);
 
-const error = applications.error ?? invitations.error ?? bookings.error ?? null;
-
 return {
-error,
+error: null,
 hasEngagement:
-(applications.count ?? 0) > 0 ||
-(invitations.count ?? 0) > 0 ||
-((bookings.data as unknown[] | null)?.length ?? 0) > 0,
+applications.length > 0 ||
+invitations.length > 0 ||
+bookings.length > 0,
 };
 }
 
@@ -482,21 +580,27 @@ if (postError) return { error: postError, action: "none" as const };
 
 if (!post) {
 return {
-error: new Error("Публикация не найдена или уже удалена"),
+error: new Error("РџСѓР±Р»РёРєР°С†РёСЏ РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё СѓР¶Рµ СѓРґР°Р»РµРЅР°"),
 action: "none" as const,
 };
 }
 
 if (post.status === "open") {
 return {
-error: new Error("Активную публикацию нельзя удалить. Сначала закройте или архивируйте её."),
+error: new Error("РђРєС‚РёРІРЅСѓСЋ РїСѓР±Р»РёРєР°С†РёСЋ РЅРµР»СЊР·СЏ СѓРґР°Р»РёС‚СЊ. РЎРЅР°С‡Р°Р»Р° Р·Р°РєСЂРѕР№С‚Рµ РёР»Рё Р°СЂС…РёРІРёСЂСѓР№С‚Рµ РµС‘."),
 action: "blocked" as const,
 };
 }
 
-const deleted = await (supabase as any).rpc("delete_archived_venue_post", { post_uuid: id });
+const deleted = await fetchJson<{ deleted?: boolean } | null>(
+`${API_URL}/api/venue-posts/${id}/archive-cleanup`,
+{
+method: "DELETE",
+},
+null,
+);
 
-if (!deleted.error) {
+if (deleted?.deleted) {
 patchCachedListsWhere<VenuePost>(
 (key) => key.startsWith("venue-posts:") || key.startsWith("venue-posts-by-venue:"),
 (items) => items.filter((post) => post.id !== id),
@@ -507,7 +611,7 @@ return { error: null, action: "deleted" as const };
 }
 
 return {
-error: deleted.error ?? new Error("Публикацию не удалось удалить"),
+error: new Error("Не удалось удалить публикацию"),
 action: "none" as const,
 };
 }

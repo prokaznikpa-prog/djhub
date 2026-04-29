@@ -1,4 +1,3 @@
-import { supabase } from "@/integrations/supabase/client";
 import {
   isThreadHiddenForParticipant,
   mapChatMessage,
@@ -9,21 +8,91 @@ import {
   type ChatThread,
   type ChatThreadRow,
 } from "@/lib/chat";
+import { supabase } from "@/integrations/supabase/client";
 
-const CHAT_THREADS_TABLE = "chat_threads" as any;
-const CHAT_MESSAGES_TABLE = "chat_messages" as any;
-const THREAD_BASE_SELECT = "id,application_id,booking_id,gig_id,dj_id,venue_id,created_at,updated_at,hidden_by_dj,hidden_by_venue";
-const THREAD_SELECT = `${THREAD_BASE_SELECT}, bookings(status, completed_at), venue_posts(title, event_date, deadline, start_time, post_type), dj_profiles(name), venue_profiles(name)`;
+const API_URL = import.meta.env.VITE_API_URL;
+const READ_REQUEST_TIMEOUT_MS = 3000;
+const MUTATION_REQUEST_TIMEOUT_MS = 6000;
 
 export const CHAT_CACHE_TTL = 45_000;
 
-type ReadyBooking = {
-  id: string;
-  application_id: string;
-  dj_id: string;
-  venue_id: string;
-  post_id: string;
-};
+async function getAuthHeaders() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : {};
+}
+
+async function fetchJson<T>(url: string, fallback: T, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), READ_REQUEST_TIMEOUT_MS);
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    if (!response.ok) return fallback;
+
+    const payload = await response.json() as { ok?: boolean; data?: T };
+    return payload.data ?? fallback;
+  } catch {
+    return fallback;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+async function mutateJson<T>(url: string, init?: RequestInit): Promise<{ data: T | null; error: Error | null }> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), MUTATION_REQUEST_TIMEOUT_MS);
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    const payload = await response.json().catch(() => null) as { ok?: boolean; data?: T; error?: string } | null;
+    if (!response.ok || payload?.ok === false) {
+      return { data: null, error: new Error(payload?.error ?? `Request failed with ${response.status}`) };
+    }
+
+    return { data: payload?.data ?? null, error: null };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return { data: null, error: new Error("Сервер долго отвечает") };
+    }
+    return { data: null, error: error instanceof Error ? error : new Error("Request failed") };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function toQuery(params: Record<string, string | undefined>) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) searchParams.set(key, value);
+  });
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
 
 export function getChatThreadsCacheKey(participant: ChatParticipant) {
   return `chat-threads:${participant.kind}:${participant.profileId}`;
@@ -119,246 +188,87 @@ export function getThreadTimestamp(value?: string | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-async function getReadyBookingForApplication(applicationId: string) {
-  const { data: application, error: applicationError } = await supabase
-    .from("applications")
-    .select("id, status")
-    .eq("id", applicationId)
-    .eq("status", "accepted")
-    .maybeSingle();
-
-  if (applicationError || !application) return null;
-
-  const { data: booking, error: bookingError } = await supabase
-    .from("bookings")
-    .select("id")
-    .eq("application_id", applicationId)
-    .maybeSingle();
-
-  return bookingError ? null : booking;
-}
-
-async function getReadyBookingForBooking(bookingId: string): Promise<ReadyBooking | null> {
-  const { data: booking, error } = await supabase
-    .from("bookings")
-    .select("id, application_id, dj_id, venue_id, post_id")
-    .eq("id", bookingId)
-    .maybeSingle();
-
-  if (error || !booking) return null;
-
-  const { data: application, error: applicationError } = await supabase
-    .from("applications")
-    .select("id, status")
-    .eq("id", (booking as { application_id: string }).application_id)
-    .eq("status", "accepted")
-    .maybeSingle();
-
-  if (applicationError || !application) return null;
-  return booking as ReadyBooking;
-}
-
-async function restoreThreadVisibility(row: ChatThreadRow) {
-  if (row.hidden_by_dj !== true && row.hidden_by_venue !== true) {
-    return { data: sanitizeChatThread(mapChatThread(row)), error: null };
-  }
-
-  let restored = await supabase
-    .from(CHAT_THREADS_TABLE)
-    .update({ hidden_by_dj: false, hidden_by_venue: false })
-    .eq("id", row.id)
-    .select(THREAD_SELECT)
-    .maybeSingle();
-
-  if (restored.error) {
-    console.warn("Failed to restore enriched chat thread, retrying base row", restored.error);
-    restored = await supabase
-      .from(CHAT_THREADS_TABLE)
-      .update({ hidden_by_dj: false, hidden_by_venue: false })
-      .eq("id", row.id)
-      .select(THREAD_BASE_SELECT)
-      .maybeSingle();
-  }
-
-  return {
-    data: restored.data ? sanitizeChatThread(mapChatThread(restored.data as ChatThreadRow)) : null,
-    error: restored.error,
-  };
-}
-
 export async function fetchChatThreadsForParticipant(participant: ChatParticipant) {
-  const runQuery = async (select: string) => {
-    const query = supabase
-      .from(CHAT_THREADS_TABLE)
-      .select(select)
-      .order("updated_at", { ascending: false });
+  const rows = await fetchJson<ChatThreadRow[]>(
+    `${API_URL}/api/chat-threads${toQuery({
+      participantKind: participant.kind,
+      profileId: participant.profileId,
+    })}`,
+    [],
+  );
 
-    return participant.kind === "dj"
-      ? await query.eq("dj_id", participant.profileId)
-      : await query.eq("venue_id", participant.profileId);
-  };
+  return sanitizeChatThreads(mapReadyChatThreads(rows), participant);
+}
 
-  let { data, error } = await runQuery(THREAD_SELECT);
-  if (error) {
-    console.warn("Failed to load enriched chat threads, retrying base rows", error);
-    const fallback = await runQuery(THREAD_BASE_SELECT);
-    data = fallback.data;
-    error = fallback.error;
-  }
+export async function fetchChatThreadById(threadId: string, participant?: ChatParticipant | null) {
+  if (!threadId) return null;
 
-  if (error) {
-    console.error("Failed to load chat threads", error);
-    return [];
-  }
+  const rows = await fetchJson<ChatThreadRow[]>(
+    `${API_URL}/api/chat-threads${toQuery({
+      threadId,
+      participantKind: participant?.kind,
+      profileId: participant?.profileId,
+    })}`,
+    [],
+  );
 
-  return sanitizeChatThreads(mapReadyChatThreads((data as ChatThreadRow[] | null) ?? []), participant);
+  const thread = mapReadyChatThreads(rows)[0] ?? null;
+  const safeThread = sanitizeChatThread(thread);
+  if (!safeThread) return null;
+  if (participant && isThreadHiddenForParticipant(safeThread, participant)) return null;
+  return safeThread;
 }
 
 export async function ensureChatThreadForBooking(bookingId: string): Promise<{ data: ChatThread | null; error: Error | null }> {
-  const booking = await getReadyBookingForBooking(bookingId);
-  if (!booking) {
-    return { data: null, error: new Error("Чат доступен только после создания брони") };
-  }
+  const { data, error } = await mutateJson<ChatThreadRow>(
+    `${API_URL}/api/chat-threads/ensure-booking`,
+    {
+      method: "POST",
+      body: JSON.stringify({ bookingId }),
+    },
+  );
 
-  let existingByBooking = await supabase
-    .from(CHAT_THREADS_TABLE)
-    .select(THREAD_SELECT)
-    .eq("booking_id", booking.id)
-    .maybeSingle();
-  if (existingByBooking.error) {
-    existingByBooking = await supabase
-      .from(CHAT_THREADS_TABLE)
-      .select(THREAD_BASE_SELECT)
-      .eq("booking_id", booking.id)
-      .maybeSingle();
-  }
-
-  if (existingByBooking.data) {
-    return restoreThreadVisibility(existingByBooking.data as ChatThreadRow);
-  }
-
-  let existingByApplication = await supabase
-    .from(CHAT_THREADS_TABLE)
-    .select(THREAD_SELECT)
-    .eq("application_id", booking.application_id)
-    .maybeSingle();
-  if (existingByApplication.error) {
-    existingByApplication = await supabase
-      .from(CHAT_THREADS_TABLE)
-      .select(THREAD_BASE_SELECT)
-      .eq("application_id", booking.application_id)
-      .maybeSingle();
-  }
-
-  if (existingByApplication.data) {
-    const existingThread = existingByApplication.data as ChatThreadRow;
-    if (!existingThread.booking_id) {
-      let repaired = await supabase
-        .from(CHAT_THREADS_TABLE)
-        .update({ booking_id: booking.id })
-        .eq("id", existingThread.id)
-        .select(THREAD_SELECT)
-        .maybeSingle();
-      if (repaired.error) {
-        repaired = await supabase
-          .from(CHAT_THREADS_TABLE)
-          .update({ booking_id: booking.id })
-          .eq("id", existingThread.id)
-          .select(THREAD_BASE_SELECT)
-          .maybeSingle();
-      }
-
-      if (repaired.error) return { data: null, error: repaired.error };
-      if (repaired.data) return restoreThreadVisibility(repaired.data as ChatThreadRow);
-      existingThread.booking_id = booking.id;
-    }
-
-    return restoreThreadVisibility(existingThread);
-  }
-
-  const inserted = await supabase
-    .from(CHAT_THREADS_TABLE)
-    .insert({
-      application_id: booking.application_id,
-      booking_id: booking.id,
-      gig_id: booking.post_id,
-      dj_id: booking.dj_id,
-      venue_id: booking.venue_id,
-    })
-    .select(THREAD_BASE_SELECT)
-    .single();
-
-  if (inserted.error) {
-    if (inserted.error.message?.toLowerCase().includes("duplicate")) {
-      const retryByBooking = await supabase
-        .from(CHAT_THREADS_TABLE)
-        .select(THREAD_BASE_SELECT)
-        .eq("booking_id", booking.id)
-        .maybeSingle();
-
-      if (retryByBooking.data || retryByBooking.error) {
-        if (retryByBooking.error) return { data: null, error: retryByBooking.error };
-        return retryByBooking.data ? restoreThreadVisibility(retryByBooking.data as ChatThreadRow) : { data: null, error: null };
-      }
-
-      const retryByApplication = await supabase
-        .from(CHAT_THREADS_TABLE)
-        .select(THREAD_BASE_SELECT)
-        .eq("application_id", booking.application_id)
-        .maybeSingle();
-
-      if (retryByApplication.error) return { data: null, error: retryByApplication.error };
-      return retryByApplication.data ? restoreThreadVisibility(retryByApplication.data as ChatThreadRow) : { data: null, error: null };
-    }
-
-    return { data: null, error: inserted.error };
-  }
-
-  return { data: sanitizeChatThread(mapChatThread(inserted.data as ChatThreadRow)), error: null };
+  return {
+    data: data ? sanitizeChatThread(mapChatThread(data)) : null,
+    error,
+  };
 }
 
 export async function ensureChatThreadForApplication(applicationId: string): Promise<{ data: ChatThread | null; error: Error | null }> {
-  const readyBooking = await getReadyBookingForApplication(applicationId);
-  if (!readyBooking) {
-    return { data: null, error: new Error("Чат доступен только после принятия отклика и создания брони") };
-  }
+  const { data, error } = await mutateJson<ChatThreadRow>(
+    `${API_URL}/api/chat-threads/ensure-application`,
+    {
+      method: "POST",
+      body: JSON.stringify({ applicationId }),
+    },
+  );
 
-  return ensureChatThreadForBooking(readyBooking.id);
+  return {
+    data: data ? sanitizeChatThread(mapChatThread(data)) : null,
+    error,
+  };
 }
 
 export async function fetchChatMessages(threadId: string) {
-  const { data, error } = await supabase
-    .from(CHAT_MESSAGES_TABLE)
-    .select("*")
-    .eq("thread_id", threadId)
-    .order("created_at", { ascending: true });
+  const rows = await fetchJson<ChatMessageRow[]>(
+    `${API_URL}/api/chat-messages${toQuery({ threadId })}`,
+    [],
+  );
 
-  if (error) {
-    console.error("Failed to load chat messages", { error, threadId });
-    return [];
-  }
-
-  return mapReadyChatMessages((data as ChatMessageRow[] | null) ?? []);
+  return mapReadyChatMessages(rows);
 }
 
 export async function fetchChatPreviews(threadIds: string[]) {
   const ids = threadIds.filter(Boolean);
   if (ids.length === 0) return {};
 
-  const { data, error } = await supabase
-    .from(CHAT_MESSAGES_TABLE)
-    .select("id, thread_id, sender_id, text, created_at")
-    .in("thread_id", ids)
-    .order("created_at", { ascending: false })
-    .limit(Math.max(ids.length * 4, 40));
-
-  if (error) {
-    console.error("Failed to load chat previews", error);
-    return {};
-  }
+  const rows = await fetchJson<ChatMessageRow[]>(
+    `${API_URL}/api/chat-previews${toQuery({ threadIds: ids.join(",") })}`,
+    [],
+  );
 
   const nextPreviews: Record<string, ChatMessage> = {};
-  mapReadyChatMessages((data as ChatMessageRow[] | null) ?? []).forEach((message) => {
+  mapReadyChatMessages(rows).forEach((message) => {
     if (!nextPreviews[message.threadId]) {
       nextPreviews[message.threadId] = message;
     }
@@ -378,25 +288,39 @@ export async function sendChatMessage(thread: ChatThread, participant: ChatParti
     return { data: null, error: new Error("Введите сообщение") };
   }
 
-  const { data, error } = await supabase
-    .from(CHAT_MESSAGES_TABLE)
-    .insert({
-      thread_id: thread.id,
-      sender_id: participant.profileId,
-      text: trimmed.slice(0, 1000),
-    })
-    .select("*")
-    .single();
-
-  if (!error) {
-    await supabase
-      .from(CHAT_THREADS_TABLE)
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", thread.id);
-  }
+  const { data, error } = await mutateJson<ChatMessageRow>(
+    `${API_URL}/api/chat-messages`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        thread_id: thread.id,
+        sender_id: participant.profileId,
+        text: trimmed,
+      }),
+    },
+  );
 
   return {
-    data: data ? mapChatMessage(data as ChatMessageRow) : null,
+    data: data ? mapChatMessage(data) : null,
+    error,
+  };
+}
+
+export async function markChatMessagesRead(ids: string[], readAt: string) {
+  if (ids.length === 0) {
+    return { data: [] as ChatMessage[], error: null };
+  }
+
+  const { data, error } = await mutateJson<ChatMessageRow[]>(
+    `${API_URL}/api/chat-messages/read`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ ids, read_at: readAt }),
+    },
+  );
+
+  return {
+    data: mapReadyChatMessages(data ?? []),
     error,
   };
 }
@@ -407,10 +331,13 @@ export async function hideChatThreadForParticipant(thread: ChatThread, participa
   }
 
   const column = participant.kind === "dj" ? "hidden_by_dj" : "hidden_by_venue";
-  const { error } = await supabase
-    .from(CHAT_THREADS_TABLE)
-    .update({ [column]: true })
-    .eq("id", thread.id);
+  const { error } = await mutateJson<ChatThreadRow>(
+    `${API_URL}/api/chat-threads/${thread.id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ [column]: true }),
+    },
+  );
 
   return { error };
 }

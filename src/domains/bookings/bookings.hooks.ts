@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useRef, useState } from "react";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import type { GigApplication, GigStatus, GigType } from "@/lib/gigs";
 import { patchCachedListsWhere, setCachedValue } from "@/lib/requestCache";
@@ -17,14 +16,125 @@ import {
   parseVenuePostsFiltersKey,
   postMatchesVenuePostsFilters,
 } from "@/domains/posts/posts.rules";
+import { supabase } from "@/integrations/supabase/client";
 
 export type BookingRow = Tables<"bookings">;
 type VenuePost = Tables<"venue_posts">;
 
 const CACHE_TTL = 90_000;
+const API_URL = import.meta.env.VITE_API_URL;
+const REQUEST_TIMEOUT_MS = 3000;
+const POLL_INTERVAL_MS = 15000;
+const FETCH_COOLDOWN_MS = 4000;
+const INITIAL_INTERVAL_DELAY_MS = 4000;
+
+async function getAuthHeaders() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : {};
+}
 
 function isUniqueViolation(error: { code?: string; message?: string } | null | undefined) {
   return error?.code === "23505" || (error?.message?.toLowerCase() ?? "").includes("duplicate");
+}
+
+async function fetchJson<T>(url: string, init: RequestInit | undefined, fallback: T): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    const payload = await response.json().catch(() => null) as { ok?: boolean; data?: T; error?: string } | null;
+    if (!response.ok || payload?.ok === false) {
+      console.error("Bookings API request failed", {
+        url,
+        method: init?.method ?? "GET",
+        status: response.status,
+        error: payload?.error ?? null,
+        body: init?.body ?? null,
+      });
+      return fallback;
+    }
+
+    return payload?.data ?? fallback;
+  } catch (error) {
+    console.error("Bookings API request error", {
+      url,
+      method: init?.method ?? "GET",
+      error,
+      body: init?.body ?? null,
+    });
+    return fallback;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+async function fetchJsonWithStatus<T>(url: string, init: RequestInit | undefined, fallback: T): Promise<{ ok: boolean; data: T }> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    const payload = await response.json().catch(() => null) as { ok?: boolean; data?: T; error?: string } | null;
+    if (!response.ok || payload?.ok === false) {
+      console.error("Bookings API request failed", {
+        url,
+        method: init?.method ?? "GET",
+        status: response.status,
+        error: payload?.error ?? null,
+        body: init?.body ?? null,
+      });
+      return { ok: false, data: fallback };
+    }
+
+    return { ok: true, data: payload?.data ?? fallback };
+  } catch (error) {
+    console.error("Bookings API request error", {
+      url,
+      method: init?.method ?? "GET",
+      error,
+      body: init?.body ?? null,
+    });
+    return { ok: false, data: fallback };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function toQuery(params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      searchParams.set(key, String(value));
+    }
+  });
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
 }
 
 function syncVenuePostCaches(post: VenuePost) {
@@ -51,12 +161,12 @@ function syncVenuePostCaches(post: VenuePost) {
 }
 
 export async function getBookingForApplication(applicationId: string) {
-  const { data, error } = await supabase
-    .from("bookings")
-    .select("*")
-    .eq("application_id", applicationId)
-    .maybeSingle();
-  return { data, error };
+  const data = await fetchJson<BookingRow[]>(
+    `${API_URL}/api/bookings${toQuery({ applicationId })}`,
+    undefined,
+    [],
+  );
+  return { data: data[0] ?? null, error: null };
 }
 
 export async function hasBookingForApplication(applicationId: string) {
@@ -71,13 +181,13 @@ export async function createBookingForAcceptedApplication(applicationId: string)
     return { data: existing.data, error: null, alreadyExists: true };
   }
 
-  const { data: application, error: applicationError } = await supabase
-    .from("applications")
-    .select("id, dj_id, post_id, status, venue_posts!inner(venue_id)")
-    .eq("id", applicationId)
-    .maybeSingle();
+  const applicationList = await fetchJson<any[]>(
+    `${API_URL}/api/applications${toQuery({ id: applicationId })}`,
+    undefined,
+    [],
+  );
+  const application = applicationList[0] ?? null;
 
-  if (applicationError) return { data: null, error: applicationError, alreadyExists: false };
   if (!application) {
     return {
       data: null,
@@ -86,7 +196,7 @@ export async function createBookingForAcceptedApplication(applicationId: string)
     };
   }
 
-  const source = application as unknown as Pick<GigApplication, "id" | "dj_id" | "post_id" | "status"> & {
+  const source = application as Pick<GigApplication, "id" | "dj_id" | "post_id" | "status"> & {
     venue_posts: Pick<Tables<"venue_posts">, "venue_id"> | null;
   };
 
@@ -115,82 +225,114 @@ export async function createBookingForAcceptedApplication(applicationId: string)
     status: DEFAULT_BOOKING_STATUS,
   };
 
-  const inserted = await supabase
-    .from("bookings")
-    .insert(booking)
-    .select("*")
-    .single();
+  const inserted = await fetchJson<BookingRow | null>(
+    `${API_URL}/api/bookings`,
+    {
+      method: "POST",
+      body: JSON.stringify(booking),
+    },
+    null,
+  );
 
-  if (inserted.error) {
-    if (isUniqueViolation(inserted.error)) {
-      const retry = await getBookingForApplication(applicationId);
-      return {
-        data: retry.data,
-        error: retry.error ?? (retry.data ? null : inserted.error),
-        alreadyExists: !!retry.data,
-      };
-    }
-
-    return { data: null, error: inserted.error, alreadyExists: false };
+  if (!inserted) {
+    const retry = await getBookingForApplication(applicationId);
+    return {
+      data: retry.data,
+      error: retry.error ?? (retry.data ? null : new Error("Не удалось создать бронь")),
+      alreadyExists: !!retry.data,
+    };
   }
 
-  return { data: inserted.data, error: null, alreadyExists: false };
+  return { data: inserted, error: null, alreadyExists: false };
 }
 
 async function markVenuePostSelected(postId: string) {
-  const { data } = await supabase
-    .from("venue_posts")
-    .update({ status: "closed" })
-    .eq("id", postId)
-    .eq("status", "open")
-    .select("*")
-    .maybeSingle();
+  const data = await fetchJson<VenuePost | null>(
+    `${API_URL}/api/venue-posts/${postId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status: "closed" }),
+    },
+    null,
+  );
 
   if (data) {
-    const updatedPost = data as VenuePost;
-    syncVenuePostCaches(updatedPost);
-    setCachedValue(`post:${postId}`, updatedPost, CACHE_TTL);
+    syncVenuePostCaches(data);
+    setCachedValue(`post:${postId}`, data, CACHE_TTL);
   }
 }
 
 export function useBookingsForParticipant(profileId: string | undefined, kind: "dj" | "venue") {
   const [bookings, setBookings] = useState<(BookingRow & { venue_posts?: Pick<VenuePost, "event_date" | "title"> | null })[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
+  const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const bookingsRef = useRef<(BookingRow & { venue_posts?: Pick<VenuePost, "event_date" | "title"> | null })[]>([]);
+
+  useEffect(() => {
+    bookingsRef.current = bookings;
+  }, [bookings]);
 
   const fetch = async (opts?: { silent?: boolean }) => {
     if (!profileId) {
       setBookings([]);
+      setError(null);
       setLoading(false);
       return;
     }
 
-    if (!opts?.silent) setLoading(true);
-    const column = kind === "dj" ? "dj_id" : "venue_id";
-    const { data } = await supabase
-      .from("bookings")
-      .select("*, venue_posts(event_date, deadline, start_time, post_type, title)")
-      .eq(column, profileId)
-      .order("created_at", { ascending: false });
+    const now = Date.now();
+    if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
+    if (now - lastFetchAtRef.current < FETCH_COOLDOWN_MS) return;
 
-    setBookings((data as any) ?? []);
-    if (!opts?.silent) setLoading(false);
+    const request = (async () => {
+      if (!opts?.silent && bookingsRef.current.length === 0) setLoading(true);
+      inFlightRef.current = true;
+      lastFetchAtRef.current = now;
+
+      try {
+        const result = await fetchJsonWithStatus<(BookingRow & { venue_posts?: Pick<VenuePost, "event_date" | "title"> | null })[]>(
+          `${API_URL}/api/bookings${toQuery(kind === "dj" ? { djId: profileId } : { venueId: profileId })}`,
+          undefined,
+          bookingsRef.current,
+        );
+
+        if (!result.ok) {
+          setError("Не удалось загрузить бронирования");
+          return;
+        }
+
+        setError(null);
+        setBookings(result.data ?? []);
+      } finally {
+        inFlightRef.current = false;
+        inFlightPromiseRef.current = null;
+        if (!opts?.silent) setLoading(false);
+      }
+    })();
+
+    inFlightPromiseRef.current = request;
+    return request;
   };
 
   useEffect(() => {
-    fetch();
+    void fetch();
     if (!profileId) return;
 
-    const column = kind === "dj" ? "dj_id" : "venue_id";
-    const channel = supabase
-      .channel(`bookings-${kind}-${profileId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "bookings", filter: `${column}=eq.${profileId}` },
-        () => { void fetch({ silent: true }); },
-      )
-      .subscribe();
+    const timeoutId = window.setTimeout(() => {
+      void fetch({ silent: true });
+    }, INITIAL_INTERVAL_DELAY_MS);
 
-    return () => { supabase.removeChannel(channel); };
+    const intervalId = window.setInterval(() => {
+      void fetch({ silent: true });
+    }, POLL_INTERVAL_MS + INITIAL_INTERVAL_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
   }, [profileId, kind]);
 
   const updateBookingLocal = (bookingId: string, updates: Partial<BookingRow>) => {
@@ -199,18 +341,18 @@ export function useBookingsForParticipant(profileId: string | undefined, kind: "
     )));
   };
 
-  return { bookings, loading, refetch: fetch, updateBookingLocal };
+  return { bookings, loading, error, refetch: fetch, updateBookingLocal };
 }
 
 export async function updateBookingStatus(id: string, status: BookingStatus) {
   const nextStatus = normalizeBookingStatus(status);
-  const { data: booking, error: bookingError } = await supabase
-    .from("bookings")
-    .select("*, venue_posts(event_date, deadline, start_time, post_type)")
-    .eq("id", id)
-    .maybeSingle();
+  const bookingList = await fetchJson<any[]>(
+    `${API_URL}/api/bookings${toQuery({ id })}`,
+    undefined,
+    [],
+  );
+  const booking = bookingList[0] ?? null;
 
-  if (bookingError) return { data: null, error: bookingError };
   if (!booking) return { data: null, error: new Error("Бронь не найдена или недоступна для обновления") };
 
   const current = booking as BookingRow & { venue_posts?: Pick<VenuePost, "event_date" | "deadline" | "start_time" | "post_type"> | null };
@@ -236,19 +378,21 @@ export async function updateBookingStatus(id: string, status: BookingStatus) {
     return { data: null, error: new Error("Эту бронь уже нельзя отменить") };
   }
 
-  const { data, error } = await supabase
-    .from("bookings")
-    .update({
-      status: nextStatus,
-      ...getBookingStatusTimestampPatch(nextStatus),
-    })
-    .eq("id", id)
-    .select("*")
-    .maybeSingle();
+  const data = await fetchJson<BookingRow | null>(
+    `${API_URL}/api/bookings/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: nextStatus,
+        ...getBookingStatusTimestampPatch(nextStatus),
+      }),
+    },
+    null,
+  );
 
-  if (!error && data && nextStatus === "confirmed" && data.post_id) {
+  if (data && nextStatus === "confirmed" && data.post_id) {
     await markVenuePostSelected(data.post_id);
   }
 
-  return { data, error };
+  return { data, error: data ? null : new Error("Не удалось обновить бронь") };
 }

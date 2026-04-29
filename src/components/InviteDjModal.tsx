@@ -3,9 +3,27 @@ import { useAuth } from "@/hooks/useAuth";
 import { createInvitation, checkInvited } from "@/domains/invitations/invitations.hooks";
 import { createNotification } from "@/domains/notifications/notifications.hooks";
 import { useVenuePostsByVenue } from "@/domains/posts/posts.hooks";
-import { supabase } from "@/integrations/supabase/client";
 import { X } from "lucide-react";
 import { toast } from "sonner";
+
+const API_URL = import.meta.env.VITE_API_URL;
+const REQUEST_TIMEOUT_MS = 6000;
+
+async function fetchJson<T>(url: string, fallback: T): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return fallback;
+    const payload = await response.json() as { ok?: boolean; data?: T };
+    return payload.data ?? fallback;
+  } catch {
+    return fallback;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 interface Props {
   venueId: string;
@@ -45,8 +63,10 @@ const InviteDjModal = ({ venueId, djId, djName, onClose }: Props) => {
     if (user) {
       const selectedPostObj = activePosts.find((p) => p.id === selectedPost);
       await createNotification(user.id, "invitation", `Вы отправили приглашение ${djName}`, selectedPost);
-      // Find DJ's user_id
-      const { data: djData } = await supabase.from("dj_profiles").select("user_id").eq("id", djId).maybeSingle();
+      const djData = await fetchJson<{ user_id?: string | null } | null>(
+        `${API_URL}/api/dj-by-id?id=${encodeURIComponent(djId)}`,
+        null,
+      );
       if (djData?.user_id) {
         await createNotification(djData.user_id, "invitation", `Вам пришло приглашение на "${selectedPostObj?.title ?? ""}"`, selectedPost);
       }

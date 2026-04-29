@@ -155,8 +155,8 @@ const Profile = () => {
 // ---- DJ Section ----
 const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refresh }: { djProfile: DjProfile; editButton: EditButton; showEdit: boolean; setShowEdit: (value: boolean) => void; refresh: () => void | Promise<void> }) => {
   const [appVisibility, setAppVisibility] = useState<ApplicationVisibility>("active");
-  const { apps: supaApps, loading: appsLoading, hideLocal: hideDjAppLocal, updateStatusLocal: updateDjAppStatusLocal } = useApplicationsForDj(djProfile.id, appVisibility);
-  const { invites, updateLocal: updateInviteLocal } = useInvitationsForDj(djProfile.id);
+  const { apps: supaApps, loading: appsLoading, error: appsError, hideLocal: hideDjAppLocal, updateStatusLocal: updateDjAppStatusLocal } = useApplicationsForDj(djProfile.id, appVisibility);
+  const { invites, loading: invitesLoading, error: invitesError, updateLocal: updateInviteLocal } = useInvitationsForDj(djProfile.id);
   const [pendingInviteAction, setPendingInviteAction] = useState<string | null>(null);
 
   const handleAcceptInvite = async (inv: any) => {
@@ -251,8 +251,10 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
             </h2>
             <ApplicationVisibilityTabs value={appVisibility} onChange={setAppVisibility} />
           </div>
-          {appsLoading ? (
+          {appsLoading && supaApps.length === 0 ? (
             <p className="text-xs text-muted-foreground">Загрузка откликов...</p>
+          ) : appsError && supaApps.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{appsError}</p>
           ) : supaApps.length === 0 ? (
             <p className="text-xs text-muted-foreground">{appVisibility === "active" ? "Вы ещё не откликались" : "Скрытых откликов нет"}</p>
           ) : (
@@ -294,7 +296,11 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
           <h2 className="text-sm font-bold text-foreground flex items-center gap-1.5">
             <Mail className="h-3.5 w-3.5 text-primary" /> Мои приглашения
           </h2>
-          {invites.length === 0 ? (
+          {invitesLoading && invites.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Загрузка приглашений...</p>
+          ) : invitesError && invites.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{invitesError}</p>
+          ) : invites.length === 0 ? (
             <p className="text-xs text-muted-foreground">Нет приглашений</p>
           ) : (
             <div className="max-h-[30vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[220px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
@@ -330,9 +336,9 @@ const DjProfileSection = ({ djProfile, editButton, showEdit, setShowEdit, refres
 // ---- Venue Section ----
 const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, showCreatePost, setShowCreatePost, refresh }: { venueProfile: VenueProfile; editButton: EditButton; showEdit: boolean; setShowEdit: (value: boolean) => void; showCreatePost: boolean; setShowCreatePost: (value: boolean) => void; refresh: () => void | Promise<void> }) => {
   const [appVisibility, setAppVisibility] = useState<ApplicationVisibility>("active");
-  const { posts: myPosts, loading: postsLoading, refetch: refetchPosts, addPost, updatePost } = useVenuePostsByVenue(venueProfile.id);
-  const { apps: venueApps, loading: appsLoading, hideLocal: hideVenueAppLocal, updateStatusLocal: updateVenueAppStatusLocal } = useApplicationsForVenue(venueProfile.id, appVisibility);
-  const { invites: venueInvites } = useInvitationsForVenue(venueProfile.id);
+  const { posts: myPosts, loading: postsLoading, error: postsError, refetch: refetchPosts, addPost, updatePost } = useVenuePostsByVenue(venueProfile.id);
+  const { apps: venueApps, loading: appsLoading, error: appsError, hideLocal: hideVenueAppLocal, updateStatusLocal: updateVenueAppStatusLocal } = useApplicationsForVenue(venueProfile.id, appVisibility);
+  const { invites: venueInvites, loading: invitesLoading, error: invitesError } = useInvitationsForVenue(venueProfile.id);
   const [pendingAppAction, setPendingAppAction] = useState<string | null>(null);
   const [engagedPostIds, setEngagedPostIds] = useState<Set<string>>(() => new Set());
 
@@ -498,12 +504,14 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
               <Plus className="h-3 w-3" /> Создать
             </button>
           </div>
-          {postsLoading ? (
+          {postsLoading && myPosts.length === 0 ? (
             <div className="space-y-1">
               {Array.from({ length: 2 }).map((_, index) => (
                 <div key={index} className="h-12 animate-pulse rounded-xl border border-white/5 bg-[#171a20]" />
               ))}
             </div>
+          ) : postsError && myPosts.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{postsError}</p>
           ) : myPosts.filter((post) => post.status === "open").length === 0 ? (
             <p className="text-xs text-muted-foreground">У вас пока нет публикаций</p>
           ) : (
@@ -541,8 +549,10 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
             </h2>
             <ApplicationVisibilityTabs value={appVisibility} onChange={setAppVisibility} />
           </div>
-          {appsLoading ? (
+          {appsLoading && venueApps.length === 0 ? (
             <p className="text-xs text-muted-foreground">Загрузка откликов...</p>
+          ) : appsError && venueApps.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{appsError}</p>
           ) : venueApps.length === 0 ? (
             <p className="text-xs text-muted-foreground">{appVisibility === "active" ? "Пока нет откликов" : "Скрытых откликов нет"}</p>
           ) : (
@@ -595,7 +605,11 @@ const VenueProfileSection = ({ venueProfile, editButton, showEdit, setShowEdit, 
           <h2 className="text-sm font-bold text-foreground flex items-center gap-1.5">
             <Mail className="h-3.5 w-3.5 text-primary" /> Мои приглашения DJ
           </h2>
-          {venueInvites.length === 0 ? (
+          {invitesLoading && venueInvites.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Загрузка приглашений...</p>
+          ) : invitesError && venueInvites.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{invitesError}</p>
+          ) : venueInvites.length === 0 ? (
             <p className="text-xs text-muted-foreground">Нет приглашений</p>
           ) : (
             <div className="max-h-[30vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[220px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">

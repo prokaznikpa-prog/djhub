@@ -1,21 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { cachedRequest, getCacheSnapshot, getCachedValue, setCachedValue } from "@/lib/requestCache";
 import {
   CHAT_CACHE_TTL,
   fetchChatMessages,
   fetchChatPreviews,
+  fetchChatThreadById,
   fetchChatThreadsForParticipant,
   getChatThreadsCacheKey,
-  mapReadyChatMessages,
-  mapReadyChatThreads,
+  markChatMessagesRead,
   mergeChatThread,
   sanitizeChatThread,
   sanitizeChatThreads,
 } from "@/lib/chatFlow";
-import { isThreadHiddenForParticipant, type ChatMessage, type ChatMessageRow, type ChatParticipant, type ChatThread, type ChatThreadRow } from "@/lib/chat";
+import { isThreadHiddenForParticipant, type ChatMessage, type ChatParticipant, type ChatThread } from "@/lib/chat";
 
-const CHAT_THREAD_SELECT = "id,application_id,booking_id,gig_id,dj_id,venue_id,created_at,updated_at,hidden_by_dj,hidden_by_venue, bookings(status, completed_at), venue_posts(title, event_date, deadline, start_time, post_type), dj_profiles(name), venue_profiles(name)";
+const THREAD_POLL_INTERVAL_MS = 15000;
+const MESSAGE_POLL_INTERVAL_MS = 7000;
+const PREVIEW_POLL_INTERVAL_MS = 15000;
+const THREAD_FETCH_COOLDOWN_MS = 4000;
+const MESSAGE_FETCH_COOLDOWN_MS = 2500;
+const PREVIEW_FETCH_COOLDOWN_MS = 4000;
+const THREAD_INITIAL_INTERVAL_DELAY_MS = 4000;
+const MESSAGE_INITIAL_INTERVAL_DELAY_MS = 4000;
+const PREVIEW_INITIAL_INTERVAL_DELAY_MS = 4000;
 
 const getMessageTimestamp = (message: Pick<ChatMessage, "createdAt">) => {
   const timestamp = new Date(message.createdAt).getTime();
@@ -53,9 +60,7 @@ const mergeMessages = (current: ChatMessage[], incoming: ChatMessage[]) => {
     const optimisticId = findMatchingOptimisticMessageId(normalizedCurrent, message);
     if (!optimisticId) return;
     const optimisticIndex = normalizedCurrent.findIndex((item) => item.id === optimisticId);
-    if (optimisticIndex >= 0) {
-      normalizedCurrent.splice(optimisticIndex, 1);
-    }
+    if (optimisticIndex >= 0) normalizedCurrent.splice(optimisticIndex, 1);
   });
 
   const merged = new Map<string, ChatMessage>();
@@ -69,9 +74,7 @@ const mergeMessages = (current: ChatMessage[], incoming: ChatMessage[]) => {
     return diff !== 0 ? diff : a.id.localeCompare(b.id);
   });
 
-  if (next.length !== current.length) {
-    return next;
-  }
+  if (next.length !== current.length) return next;
 
   for (let index = 0; index < next.length; index += 1) {
     if (!areMessagesEqual(next[index], current[index])) {
@@ -103,6 +106,15 @@ export function useChatThreads(participant: ChatParticipant | null) {
     participant && cacheSnapshot?.value ? sanitizeChatThreads(cacheSnapshot.value, participant) : []
   ));
   const [loading, setLoading] = useState(() => cacheKey ? !cacheSnapshot?.value : false);
+  const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
+  const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const threadsRef = useRef<ChatThread[]>(participant && cacheSnapshot?.value ? sanitizeChatThreads(cacheSnapshot.value, participant) : []);
+
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
 
   const fetch = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
     if (!participant) {
@@ -111,16 +123,41 @@ export function useChatThreads(participant: ChatParticipant | null) {
       return;
     }
 
-    const key = getChatThreadsCacheKey(participant);
-    if (!opts?.silent) setLoading(true);
-    const next = opts?.force
-      ? await fetchChatThreadsForParticipant(participant)
-      : await cachedRequest(key, () => fetchChatThreadsForParticipant(participant), CHAT_CACHE_TTL);
+    const now = Date.now();
+    if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
+    if (now - lastFetchAtRef.current < THREAD_FETCH_COOLDOWN_MS) return;
 
-    const safeNext = sanitizeChatThreads(next, participant);
-    setCachedValue(key, safeNext, CHAT_CACHE_TTL);
-    setThreads(safeNext);
-    if (!opts?.silent) setLoading(false);
+    const request = (async () => {
+      const key = getChatThreadsCacheKey(participant);
+      if (!opts?.silent && threadsRef.current.length === 0) setLoading(true);
+      inFlightRef.current = true;
+      lastFetchAtRef.current = now;
+
+      try {
+        const next = opts?.force
+          ? await fetchChatThreadsForParticipant(participant)
+          : await cachedRequest(key, () => fetchChatThreadsForParticipant(participant), CHAT_CACHE_TTL);
+
+        const safeNext = sanitizeChatThreads(next, participant);
+        setThreads((current) => {
+          const resolved = safeNext.length === 0 && current.length > 0 ? current : safeNext;
+          if (resolved === current) return current;
+          setCachedValue(key, resolved, CHAT_CACHE_TTL);
+          return resolved;
+        });
+        if (!(safeNext.length === 0 && threads.length > 0)) {
+          setCachedValue(key, safeNext, CHAT_CACHE_TTL);
+        }
+        setError(safeNext.length === 0 && threadsRef.current.length > 0 ? "Не удалось обновить чаты" : null);
+      } finally {
+        inFlightRef.current = false;
+        inFlightPromiseRef.current = null;
+        if (!opts?.silent) setLoading(false);
+      }
+    })();
+
+    inFlightPromiseRef.current = request;
+    return request;
   }, [participant?.profileId, participant?.kind]);
 
   useEffect(() => {
@@ -139,33 +176,22 @@ export function useChatThreads(participant: ChatParticipant | null) {
       setLoading(true);
     }
 
-    if (snapshot.exists && !snapshot.isStale) {
-      return;
+    if (!(snapshot.exists && !snapshot.isStale)) {
+      if (snapshot.value) void fetch({ silent: true, force: true });
+      else void fetch();
     }
 
-    if (snapshot.value) {
+    const timeoutId = window.setTimeout(() => {
       void fetch({ silent: true, force: true });
-    } else {
-      void fetch();
-    }
+    }, THREAD_INITIAL_INTERVAL_DELAY_MS);
 
-    const participantColumn = participant.kind === "dj" ? "dj_id" : "venue_id";
-    const channel = supabase
-      .channel(`chat-threads-${participant.kind}-${participant.profileId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "chat_threads",
-          filter: `${participantColumn}=eq.${participant.profileId}`,
-        },
-        () => { void fetch({ silent: true, force: true }); },
-      )
-      .subscribe();
+    const intervalId = window.setInterval(() => {
+      void fetch({ silent: true, force: true });
+    }, THREAD_POLL_INTERVAL_MS + THREAD_INITIAL_INTERVAL_DELAY_MS);
 
     return () => {
-      supabase.removeChannel(channel);
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
     };
   }, [fetch, participant?.profileId, participant?.kind]);
 
@@ -198,20 +224,8 @@ export function useChatThreads(participant: ChatParticipant | null) {
   const refreshThread = useCallback(async (threadId: string) => {
     if (!participant || !threadId) return null;
 
-    const { data, error } = await supabase
-      .from("chat_threads")
-      .select(CHAT_THREAD_SELECT)
-      .eq("id", threadId)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Failed to refresh chat thread", { error, threadId, participant });
-      return null;
-    }
-
-    const nextThread = mapReadyChatThreads((data ? [data as ChatThreadRow] : []) ?? [])[0] ?? null;
-    const safeThread = sanitizeChatThread(nextThread);
-    if (!safeThread || isThreadHiddenForParticipant(safeThread, participant)) return null;
+    const safeThread = await fetchChatThreadById(threadId, participant);
+    if (!safeThread) return null;
 
     setThreads((current) => {
       const next = mergeChatThread(current, safeThread);
@@ -222,21 +236,25 @@ export function useChatThreads(participant: ChatParticipant | null) {
     return safeThread;
   }, [participant?.profileId, participant?.kind]);
 
-  return { threads, loading, refetch: fetch, addThread, removeThreadLocal, updateThreadLocal, refreshThread };
+  return { threads, loading, error, refetch: fetch, addThread, removeThreadLocal, updateThreadLocal, refreshThread };
 }
 
 export function useChatMessages(thread: ChatThread | null, participant: ChatParticipant | null, currentUserId?: string | null) {
   const cacheKey = thread?.id ? `chat-messages:${thread.id}` : null;
   const cacheSnapshot = cacheKey ? getCacheSnapshot<ChatMessage[]>(cacheKey) : null;
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => cacheSnapshot?.value ?? []);
   const [loading, setLoading] = useState(() => !cacheSnapshot?.value && !!thread?.id);
+  const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
-  const activeThreadIdRef = useRef<string | null>(thread?.id ?? null);
   const markingReadRef = useRef<Set<string>>(new Set());
+  const inFlightRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
+  const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const messagesRef = useRef<ChatMessage[]>(cacheSnapshot?.value ?? []);
 
   useEffect(() => {
-    activeThreadIdRef.current = thread?.id ?? null;
-  }, [thread?.id]);
+    messagesRef.current = messages;
+  }, [messages]);
 
   const updateMessagesCache = useCallback((updater: (current: ChatMessage[]) => ChatMessage[]) => {
     if (!thread?.id) return;
@@ -261,20 +279,36 @@ export function useChatMessages(thread: ChatThread | null, participant: ChatPart
       return;
     }
 
-    const key = `chat-messages:${thread.id}`;
-    if (!opts?.silent) setLoading(true);
-    console.time("chat messages load");
-    const next = opts?.force
-      ? await fetchChatMessages(thread.id)
-      : await cachedRequest(key, () => fetchChatMessages(thread.id), CHAT_CACHE_TTL);
-    console.timeEnd("chat messages load");
-    if (currentRequestId !== requestId.current) return;
-    setMessages((current) => {
-      const merged = mergeMessages(current, next);
-      setCachedValue(key, merged, CHAT_CACHE_TTL);
-      return merged;
-    });
-    if (!opts?.silent) setLoading(false);
+    const now = Date.now();
+    if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
+    if (now - lastFetchAtRef.current < MESSAGE_FETCH_COOLDOWN_MS) return;
+
+    const request = (async () => {
+      const key = `chat-messages:${thread.id}`;
+      if (!opts?.silent && messagesRef.current.length === 0) setLoading(true);
+      inFlightRef.current = true;
+      lastFetchAtRef.current = now;
+
+      try {
+        const next = opts?.force
+          ? await fetchChatMessages(thread.id)
+          : await cachedRequest(key, () => fetchChatMessages(thread.id), CHAT_CACHE_TTL);
+        if (currentRequestId !== requestId.current) return;
+        setMessages((current) => {
+          const merged = next.length === 0 && current.length > 0 ? current : mergeMessages(current, next);
+          setCachedValue(key, merged, CHAT_CACHE_TTL);
+          return merged;
+        });
+        setError(next.length === 0 && messagesRef.current.length > 0 ? "Не удалось обновить сообщения" : null);
+      } finally {
+        inFlightRef.current = false;
+        inFlightPromiseRef.current = null;
+        if (!opts?.silent) setLoading(false);
+      }
+    })();
+
+    inFlightPromiseRef.current = request;
+    return request;
   }, [thread?.id]);
 
   useEffect(() => {
@@ -294,70 +328,24 @@ export function useChatMessages(thread: ChatThread | null, participant: ChatPart
       setLoading(true);
     }
 
-    if (snapshot.exists && !snapshot.isStale) {
-      return;
+    if (!(snapshot.exists && !snapshot.isStale)) {
+      if (snapshot.value) void fetch({ silent: true, force: true });
+      else void fetch();
     }
 
-    if (snapshot.value) {
+    const timeoutId = window.setTimeout(() => {
       void fetch({ silent: true, force: true });
-    } else {
-      void fetch();
-    }
+    }, MESSAGE_INITIAL_INTERVAL_DELAY_MS);
+
+    const intervalId = window.setInterval(() => {
+      void fetch({ silent: true, force: true });
+    }, MESSAGE_POLL_INTERVAL_MS + MESSAGE_INITIAL_INTERVAL_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
   }, [fetch, thread?.id, participant?.profileId, participant?.kind]);
-
-  useEffect(() => {
-    if (!thread?.id) return;
-
-    const channel = supabase
-      .channel(`chat-messages-${thread.id}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "chat_messages", filter: `thread_id=eq.${thread.id}` },
-        (payload) => {
-          if (activeThreadIdRef.current !== thread.id) return;
-          const message = mapReadyChatMessages([payload.new as ChatMessageRow])[0];
-          if (!message) return;
-          setMessages((current) => {
-            const next = mergeMessages(current, [message]);
-            if (next === current) return current;
-            updateMessagesCache((cached) => mergeMessages(cached, [message]));
-            return next;
-          });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "chat_messages", filter: `thread_id=eq.${thread.id}` },
-        (payload) => {
-          if (activeThreadIdRef.current !== thread.id) return;
-          const message = mapReadyChatMessages([payload.new as ChatMessageRow])[0];
-          if (!message) return;
-          patchMessages((current) => {
-            const existing = current.find((item) => item.id === message.id);
-            if (!existing) return current;
-            if (
-              existing.text === message.text
-              && existing.createdAt === message.createdAt
-              && existing.readAt === message.readAt
-            ) {
-              return current;
-            }
-            if (existing.readAt !== message.readAt) {
-              console.debug("[chat-read] realtime update", {
-                activeThreadId: thread.id,
-                messageId: message.id,
-                previousReadAt: existing.readAt ?? null,
-                nextReadAt: message.readAt ?? null,
-              });
-            }
-            return mergeMessages(current.filter((item) => item.id !== message.id), [message]);
-          });
-        },
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [thread?.id, participant?.profileId, participant?.kind, patchMessages, updateMessagesCache]);
 
   useEffect(() => {
     if (!thread?.id || messages.length === 0) return;
@@ -369,13 +357,6 @@ export function useChatMessages(thread: ChatThread | null, participant: ChatPart
 
     if (unreadIncomingIds.length === 0) return;
 
-    console.debug("[chat-read] mark requested", {
-      activeThreadId: thread.id,
-      currentUserId: currentUserId ?? null,
-      participantProfileId: participant?.profileId ?? null,
-      count: unreadIncomingIds.length,
-    });
-
     unreadIncomingIds.forEach((id) => markingReadRef.current.add(id));
     const readAt = new Date().toISOString();
 
@@ -383,31 +364,25 @@ export function useChatMessages(thread: ChatThread | null, participant: ChatPart
       unreadIncomingIds.includes(message.id) ? { ...message, readAt } : message
     )));
 
-    void supabase
-      .from("chat_messages")
-      .update({ read_at: readAt })
-      .in("id", unreadIncomingIds)
-      .then(({ error }) => {
-        unreadIncomingIds.forEach((id) => markingReadRef.current.delete(id));
-        if (error) {
-          console.error("Failed to mark chat messages as read", {
-            error,
-            activeThreadId: thread.id,
-            currentUserId: currentUserId ?? null,
-            participantProfileId: participant?.profileId ?? null,
-            count: unreadIncomingIds.length,
-            unreadIncomingIds,
-          });
-          void fetch({ silent: true, force: true });
-          return;
-        }
-        console.debug("[chat-read] marked as read", {
+    void markChatMessagesRead(unreadIncomingIds, readAt).then(({ data, error }) => {
+      unreadIncomingIds.forEach((id) => markingReadRef.current.delete(id));
+      if (error) {
+        console.error("Failed to mark chat messages as read", {
+          error,
           activeThreadId: thread.id,
           currentUserId: currentUserId ?? null,
           participantProfileId: participant?.profileId ?? null,
           count: unreadIncomingIds.length,
+          unreadIncomingIds,
         });
-      });
+        void fetch({ silent: true, force: true });
+        return;
+      }
+
+      if (data.length > 0) {
+        patchMessages((current) => mergeMessages(current, data));
+      }
+    });
   }, [currentUserId, fetch, messages, participant?.profileId, patchMessages, thread?.id]);
 
   const appendMessage = useCallback((message: ChatMessage) => {
@@ -436,69 +411,81 @@ export function useChatMessages(thread: ChatThread | null, participant: ChatPart
     });
   }, [updateMessagesCache]);
 
-  return { messages, loading, refetch: fetch, appendMessage, replaceMessage, removeMessage };
+  return { messages, loading, error, refetch: fetch, appendMessage, replaceMessage, removeMessage };
 }
 
 export function useChatThreadPreviews(threads: ChatThread[]) {
   const [previews, setPreviews] = useState<Record<string, ChatMessage>>({});
   const threadIds = threads.map((thread) => thread.id).join(",");
-
-  useEffect(() => {
-    const fetchPreviews = async () => {
-      const ids = threads.map((thread) => thread.id).filter(Boolean);
-      if (ids.length === 0) {
-        setPreviews({});
-        return;
-      }
-
-      const key = `chat-previews:${ids.join(",")}`;
-      const snapshot = getCacheSnapshot<Record<string, ChatMessage>>(key);
-      if (snapshot.value) {
-        setPreviews(snapshot.value);
-      } else {
-        setPreviews({});
-      }
-
-      if (snapshot.exists && !snapshot.isStale) {
-        return;
-      }
-
-      const next = await cachedRequest(key, () => fetchChatPreviews(ids), 30_000);
-      setPreviews((current) => {
-        const merged = mergePreviews(current, next);
-        setCachedValue(key, merged, 30_000);
-        return merged;
-      });
-    };
-
-    void fetchPreviews();
-  }, [threadIds]);
+  const inFlightRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
+  const inFlightPromiseRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     const ids = threads.map((thread) => thread.id).filter(Boolean);
-    if (ids.length === 0) return;
+    if (ids.length === 0) {
+      setPreviews({});
+      return;
+    }
 
-    const idSet = new Set(ids);
-    const channel = supabase
-      .channel(`chat-message-previews-${threadIds}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "chat_messages" },
-        (payload) => {
-          const message = mapReadyChatMessages([payload.new as ChatMessageRow])[0];
-          if (!message) return;
-          if (!idSet.has(message.threadId)) return;
+    let cancelled = false;
+    const key = `chat-previews:${ids.join(",")}`;
+
+    const fetchCurrent = async (force = false) => {
+      const now = Date.now();
+      if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
+      if (now - lastFetchAtRef.current < PREVIEW_FETCH_COOLDOWN_MS) return;
+
+      const snapshot = getCacheSnapshot<Record<string, ChatMessage>>(key);
+      if (!force) {
+        if (snapshot.value) {
+          setPreviews(snapshot.value);
+        } else {
+          setPreviews({});
+        }
+        if (snapshot.exists && !snapshot.isStale) return;
+      }
+
+      const request = (async () => {
+        inFlightRef.current = true;
+        lastFetchAtRef.current = now;
+
+        try {
+          const next = force
+            ? await fetchChatPreviews(ids)
+            : await cachedRequest(key, () => fetchChatPreviews(ids), 30_000);
+
+          if (cancelled) return;
+
           setPreviews((current) => {
-            const merged = mergePreviews(current, { [message.threadId]: message });
-            if (merged[message.threadId] === current[message.threadId]) return current;
-            setCachedValue(`chat-previews:${ids.join(",")}`, merged, 30_000);
+            const merged = mergePreviews(current, next);
+            setCachedValue(key, merged, 30_000);
             return merged;
           });
-        },
-      )
-      .subscribe();
+        } finally {
+          inFlightRef.current = false;
+          inFlightPromiseRef.current = null;
+        }
+      })();
 
-    return () => { supabase.removeChannel(channel); };
+      inFlightPromiseRef.current = request;
+      return request;
+    };
+
+    void fetchCurrent();
+    const timeoutId = window.setTimeout(() => {
+      void fetchCurrent(true);
+    }, PREVIEW_INITIAL_INTERVAL_DELAY_MS);
+
+    const intervalId = window.setInterval(() => {
+      void fetchCurrent(true);
+    }, PREVIEW_POLL_INTERVAL_MS + PREVIEW_INITIAL_INTERVAL_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
   }, [threadIds]);
 
   const updatePreview = useCallback((threadId: string, message: ChatMessage | null) => {

@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Gig,
   type GigApplication,
@@ -31,77 +29,195 @@ import {
   toApplicationDbStatus,
   updateApplicationInCollection,
 } from "@/domains/applications/applications.rules";
+import { supabase } from "@/integrations/supabase/client";
 
 export type AppRow = GigApplication;
 
 const CACHE_TTL = 90_000;
+const API_URL = import.meta.env.VITE_API_URL;
+const REQUEST_TIMEOUT_MS = 3000;
+const POLL_INTERVAL_MS = 15000;
+const FETCH_COOLDOWN_MS = 4000;
+const INITIAL_INTERVAL_DELAY_MS = 4000;
 
-function isMissingColumnError(error: { message?: string } | null | undefined, column: string) {
-  return (error?.message?.toLowerCase() ?? "").includes(column.toLowerCase());
+async function getAuthHeaders() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : {};
+}
+
+async function fetchJson<T>(url: string, init: RequestInit | undefined, fallback: T): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    const payload = await response.json().catch(() => null) as { ok?: boolean; data?: T; error?: string } | null;
+    if (!response.ok || payload?.ok === false) {
+      console.error("Applications API request failed", {
+        url,
+        method: init?.method ?? "GET",
+        status: response.status,
+        error: payload?.error ?? null,
+        body: init?.body ?? null,
+      });
+      return fallback;
+    }
+
+    return payload?.data ?? fallback;
+  } catch (error) {
+    console.error("Applications API request error", {
+      url,
+      method: init?.method ?? "GET",
+      error,
+      body: init?.body ?? null,
+    });
+    return fallback;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+async function fetchJsonWithStatus<T>(url: string, init: RequestInit | undefined, fallback: T): Promise<{ ok: boolean; data: T }> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    const payload = await response.json().catch(() => null) as { ok?: boolean; data?: T; error?: string } | null;
+    if (!response.ok || payload?.ok === false) {
+      console.error("Applications API request failed", {
+        url,
+        method: init?.method ?? "GET",
+        status: response.status,
+        error: payload?.error ?? null,
+        body: init?.body ?? null,
+      });
+      return { ok: false, data: fallback };
+    }
+
+    return { ok: true, data: payload?.data ?? fallback };
+  } catch (error) {
+    console.error("Applications API request error", {
+      url,
+      method: init?.method ?? "GET",
+      error,
+      body: init?.body ?? null,
+    });
+    return { ok: false, data: fallback };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function toQuery(params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      searchParams.set(key, String(value));
+    }
+  });
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
 }
 
 async function getPostModerationState(postId: string) {
-  const withModeration = await supabase
-    .from("venue_posts")
-    .select("id, status, application_round, venue_id, moderation_status")
-    .eq("id", postId)
-    .maybeSingle();
+  const data = await fetchJson<any[]>(
+    `${API_URL}/api/venue-posts${toQuery({ id: postId })}`,
+    undefined,
+    [],
+  );
 
-  if (!withModeration.error) {
-    return { data: withModeration.data as any, error: null };
-  }
+  const post = data[0] ?? null;
+  if (!post) return { data: null, error: null };
 
-  if (!isMissingColumnError(withModeration.error, "moderation_status")) {
-    return { data: null, error: withModeration.error };
-  }
-
-  const fallback = await supabase
-    .from("venue_posts")
-    .select("id, status, application_round, venue_id")
-    .eq("id", postId)
-    .maybeSingle();
-
-  if (fallback.error) return { data: null, error: fallback.error };
-  return { data: fallback.data ? { ...(fallback.data as any), moderation_status: "active" } : null, error: null };
+  return {
+    data: {
+      ...post,
+      moderation_status: post.moderation_status ?? "active",
+    },
+    error: null,
+  };
 }
 
 async function getVenuePostCurrentRound(postId: string) {
-  const { data, error } = await supabase
-    .from("venue_posts")
-    .select("application_round")
-    .eq("id", postId)
-    .maybeSingle();
-  return { data, error, round: ((data as any)?.application_round as number | null) ?? 1 };
+  const data = await fetchJson<any[]>(
+    `${API_URL}/api/venue-posts${toQuery({ id: postId })}`,
+    undefined,
+    [],
+  );
+
+  const post = data[0] ?? null;
+  return {
+    data: post,
+    error: null,
+    round: ((post as { application_round?: number | null } | null)?.application_round ?? 1),
+  };
 }
 
 export async function getVenuePostSelection(postId: string) {
   const currentPost = await getVenuePostCurrentRound(postId);
   if (currentPost.error) return { error: currentPost.error, isSelected: false };
-  const currentRound = currentPost.round;
 
-  const bookings = await supabase
-    .from("bookings")
-    .select("id, applications!inner(application_round)")
-    .eq("post_id", postId)
-    .eq("status", "confirmed")
-    .eq("applications.application_round", currentRound)
-    .limit(1);
+  const bookings = await fetchJson<any[]>(
+    `${API_URL}/api/bookings${toQuery({
+      postId,
+      status: "confirmed",
+      applicationRound: currentPost.round,
+    })}`,
+    undefined,
+    [],
+  );
 
-  const error = bookings.error ?? null;
   return {
-    error,
-    isSelected: ((bookings.data as unknown[] | null)?.length ?? 0) > 0,
+    error: null,
+    isSelected: bookings.length > 0,
   };
 }
 
 export function useApplicationsForPost(postId: string | undefined) {
   const [apps, setApps] = useState<GigApplicationWithDj[]>([]);
+
   const fetch = async () => {
     if (!postId) return;
-    const { data } = await supabase.from("applications").select("*, dj_profiles(*)").eq("post_id", postId);
-    setApps((data as any) ?? []);
+    const data = await fetchJson<GigApplicationWithDj[]>(
+      `${API_URL}/api/applications${toQuery({ postId })}`,
+      undefined,
+      [],
+    );
+    setApps(data);
   };
-  useEffect(() => { fetch(); }, [postId]);
+
+  useEffect(() => {
+    void fetch();
+  }, [postId]);
+
   return { apps, refetch: fetch };
 }
 
@@ -110,37 +226,68 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
   const cacheSnapshot = getCacheSnapshot<GigApplicationWithGig[]>(cacheKey);
   const [allApps, setAllApps] = useState<GigApplicationWithGig[]>(() => cacheSnapshot.value ?? []);
   const [loading, setLoading] = useState(() => !cacheSnapshot.value);
+  const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
+  const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const appsRef = useRef<GigApplicationWithGig[]>(cacheSnapshot.value ?? []);
+
+  useEffect(() => {
+    appsRef.current = allApps;
+  }, [allApps]);
+
   const fetch = async (opts?: { silent?: boolean; force?: boolean }) => {
     if (!djId) {
       setAllApps([]);
       setLoading(false);
       return;
     }
-    if (!opts?.silent && allApps.length === 0) setLoading(true);
-    try {
-      const request = async () => {
-        const { data, error } = await supabase
-          .from("applications")
-          .select("*, venue_posts(id, title, post_type, event_date, deadline, start_time, venue_id, venue_profiles(id, name, user_id))")
-          .eq("dj_id", djId)
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        return ((data as any) ?? []) as GigApplicationWithGig[];
-      };
-      const data = opts?.force ? await request() : await cachedRequest(cacheKey, request, CACHE_TTL);
-      setCachedValue(cacheKey, data, CACHE_TTL);
-      setAllApps(data);
-    } catch (error) {
-      console.error("Failed to load DJ applications", error);
-      setAllApps([]);
-    } finally {
-      setLoading(false);
-    }
+
+    const now = Date.now();
+    if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
+    if (now - lastFetchAtRef.current < FETCH_COOLDOWN_MS) return;
+
+    const request = (async () => {
+      if (!opts?.silent && appsRef.current.length === 0) setLoading(true);
+      inFlightRef.current = true;
+      lastFetchAtRef.current = now;
+
+      try {
+        const loader = async () => fetchJsonWithStatus<GigApplicationWithGig[]>(
+          `${API_URL}/api/applications${toQuery({ djId })}`,
+          undefined,
+          appsRef.current,
+        );
+
+        const data = await loader();
+        if (!data.ok) {
+          setError("Не удалось загрузить отклики");
+          return;
+        }
+
+        setError(null);
+        setCachedValue(cacheKey, data.data, CACHE_TTL);
+        setAllApps(data.data);
+      } catch (error) {
+        console.error("Failed to load DJ applications", error);
+        setError("Не удалось загрузить отклики");
+      } finally {
+        inFlightRef.current = false;
+        inFlightPromiseRef.current = null;
+        setLoading(false);
+      }
+    })();
+
+    inFlightPromiseRef.current = request;
+    return request;
   };
+
   useEffect(() => {
     const snapshot = getCacheSnapshot<GigApplicationWithGig[]>(cacheKey);
+
     if (snapshot.value) {
       setAllApps(snapshot.value);
+      setError(null);
       setLoading(false);
     } else {
       setAllApps([]);
@@ -157,18 +304,22 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
       }
     }
 
-    const channel = supabase
-      .channel(`applications-dj-${djId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "applications", filter: `dj_id=eq.${djId}` },
-        () => { void fetch({ silent: true, force: true }); },
-      )
-      .subscribe();
+    const timeoutId = window.setTimeout(() => {
+      void fetch({ silent: true, force: true });
+    }, INITIAL_INTERVAL_DELAY_MS);
 
-    return () => { supabase.removeChannel(channel); };
+    const intervalId = window.setInterval(() => {
+      void fetch({ silent: true, force: true });
+    }, POLL_INTERVAL_MS + INITIAL_INTERVAL_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
   }, [cacheKey, djId]);
+
   const collection = useMemo(() => createApplicationCollection(allApps, "dj", visibility), [allApps, visibility]);
+
   const hideLocal = (applicationId: string) => {
     setAllApps((current) => {
       const next = updateApplicationInCollection(current, applicationId, getApplicationVisibilityPatch("dj", visibility === "active"));
@@ -176,6 +327,7 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
       return next;
     });
   };
+
   const updateLocal = (applicationId: string, updates: ApplicationLocalPatch) => {
     setAllApps((current) => {
       const next = updateApplicationInCollection(current, applicationId, updates);
@@ -183,6 +335,7 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
       return next;
     });
   };
+
   const updateStatusLocal = (applicationId: string, status: ApplicationStatusInput) => {
     setAllApps((current) => {
       const next = patchApplicationStatusLocally(current, applicationId, status);
@@ -190,7 +343,8 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
       return next;
     });
   };
-  return { apps: collection.current, collection, loading, refetch: fetch, hideLocal, updateLocal, updateStatusLocal };
+
+  return { apps: collection.current, collection, loading, error, refetch: fetch, hideLocal, updateLocal, updateStatusLocal };
 }
 
 export function useApplicationsForVenue(venueId: string | undefined, visibility: ApplicationVisibility = "active") {
@@ -198,37 +352,68 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
   const cacheSnapshot = getCacheSnapshot<GigApplicationForVenue[]>(cacheKey);
   const [allApps, setAllApps] = useState<GigApplicationForVenue[]>(() => cacheSnapshot.value ?? []);
   const [loading, setLoading] = useState(() => !cacheSnapshot.value);
+  const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
+  const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const appsRef = useRef<GigApplicationForVenue[]>(cacheSnapshot.value ?? []);
+
+  useEffect(() => {
+    appsRef.current = allApps;
+  }, [allApps]);
+
   const fetch = async (opts?: { silent?: boolean; force?: boolean }) => {
     if (!venueId) {
       setAllApps([]);
       setLoading(false);
       return;
     }
-    if (!opts?.silent && allApps.length === 0) setLoading(true);
-    try {
-      const request = async () => {
-        const { data, error } = await supabase
-          .from("applications")
-          .select("*, dj_profiles(id, name, user_id), venue_posts!inner(id, title, post_type, venue_id)")
-          .eq("venue_posts.venue_id", venueId)
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        return ((data as any) ?? []) as GigApplicationForVenue[];
-      };
-      const data = opts?.force ? await request() : await cachedRequest(cacheKey, request, CACHE_TTL);
-      setCachedValue(cacheKey, data, CACHE_TTL);
-      setAllApps(data);
-    } catch (error) {
-      console.error("Failed to load venue applications", error);
-      setAllApps([]);
-    } finally {
-      setLoading(false);
-    }
+
+    const now = Date.now();
+    if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
+    if (now - lastFetchAtRef.current < FETCH_COOLDOWN_MS) return;
+
+    const request = (async () => {
+      if (!opts?.silent && appsRef.current.length === 0) setLoading(true);
+      inFlightRef.current = true;
+      lastFetchAtRef.current = now;
+
+      try {
+        const loader = async () => fetchJsonWithStatus<GigApplicationForVenue[]>(
+          `${API_URL}/api/applications${toQuery({ venueId })}`,
+          undefined,
+          appsRef.current,
+        );
+
+        const data = await loader();
+        if (!data.ok) {
+          setError("Не удалось загрузить отклики");
+          return;
+        }
+
+        setError(null);
+        setCachedValue(cacheKey, data.data, CACHE_TTL);
+        setAllApps(data.data);
+      } catch (error) {
+        console.error("Failed to load venue applications", error);
+        setError("Не удалось загрузить отклики");
+      } finally {
+        inFlightRef.current = false;
+        inFlightPromiseRef.current = null;
+        setLoading(false);
+      }
+    })();
+
+    inFlightPromiseRef.current = request;
+    return request;
   };
+
   useEffect(() => {
     const snapshot = getCacheSnapshot<GigApplicationForVenue[]>(cacheKey);
+
     if (snapshot.value) {
       setAllApps(snapshot.value);
+      setError(null);
       setLoading(false);
     } else {
       setAllApps([]);
@@ -245,18 +430,22 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
       }
     }
 
-    const channel = supabase
-      .channel(`applications-venue-${venueId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "applications" },
-        () => { void fetch({ silent: true, force: true }); },
-      )
-      .subscribe();
+    const timeoutId = window.setTimeout(() => {
+      void fetch({ silent: true, force: true });
+    }, INITIAL_INTERVAL_DELAY_MS);
 
-    return () => { supabase.removeChannel(channel); };
+    const intervalId = window.setInterval(() => {
+      void fetch({ silent: true, force: true });
+    }, POLL_INTERVAL_MS + INITIAL_INTERVAL_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
   }, [cacheKey, venueId]);
+
   const collection = useMemo(() => createApplicationCollection(allApps, "venue", visibility), [allApps, visibility]);
+
   const hideLocal = (applicationId: string) => {
     setAllApps((current) => {
       const next = updateApplicationInCollection(current, applicationId, getApplicationVisibilityPatch("venue", visibility === "active"));
@@ -264,6 +453,7 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
       return next;
     });
   };
+
   const updateLocal = (applicationId: string, updates: ApplicationLocalPatch) => {
     setAllApps((current) => {
       const next = updateApplicationInCollection(current, applicationId, updates);
@@ -271,6 +461,7 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
       return next;
     });
   };
+
   const updateStatusLocal = (applicationId: string, status: ApplicationStatusInput) => {
     setAllApps((current) => {
       const next = patchApplicationStatusLocally(current, applicationId, status);
@@ -278,46 +469,35 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
       return next;
     });
   };
-  return { apps: collection.current, collection, loading, refetch: fetch, hideLocal, updateLocal, updateStatusLocal };
+
+  return { apps: collection.current, collection, loading, error, refetch: fetch, hideLocal, updateLocal, updateStatusLocal };
 }
 
 export async function createApplication(djId: string, postId: string, message?: string) {
-  const { data: dj, error: djError } = await supabase
-    .from("dj_profiles")
-    .select("status")
-    .eq("id", djId)
-    .maybeSingle();
-  if (djError) return { data: null, error: djError, alreadyApplied: false };
-  if (dj?.status !== "active") {
+  const dj = await fetchJson<any | null>(`${API_URL}/api/djs/${djId}`, undefined, null);
+  if (!dj) return { data: null, error: new Error("Профиль DJ недоступен"), alreadyApplied: false };
+  if (dj.status !== "active") {
     return { data: null, error: new Error("Профиль DJ ограничен модератором"), alreadyApplied: false };
   }
+
   const { data: gig, error: gigError } = await getPostModerationState(postId);
   if (gigError) return { data: null, error: gigError, alreadyApplied: false };
   if (gig && !isOpenGig(gig as Pick<Gig, "status">)) {
-    return {
-      data: null,
-      error: new Error("Эта публикация уже закрыта"),
-      alreadyApplied: false,
-    };
+    return { data: null, error: new Error("Эта публикация уже закрыта"), alreadyApplied: false };
   }
+
   const interaction = canInteractWithPost(gig);
   if (!interaction.allowed) {
-    return {
-      data: null,
-      error: new Error(interaction.reason ?? "Публикация недоступна"),
-      alreadyApplied: false,
-    };
+    return { data: null, error: new Error(interaction.reason ?? "Публикация недоступна"), alreadyApplied: false };
   }
+
   const selection = await getVenuePostSelection(postId);
   if (selection.error) return { data: null, error: selection.error, alreadyApplied: false };
   if (selection.isSelected) {
-    return {
-      data: null,
-      error: new Error("На эту публикацию уже выбран DJ"),
-      alreadyApplied: false,
-    };
+    return { data: null, error: new Error("На эту публикацию уже выбран DJ"), alreadyApplied: false };
   }
-  const currentRound = ((gig as any)?.application_round as number | null) ?? 1;
+
+  const currentRound = ((gig as { application_round?: number | null } | null)?.application_round ?? 1);
   const existing = await getApplicationForDjAndGig(djId, postId, currentRound);
   if (existing.data) {
     return { data: existing.data, error: null, alreadyApplied: true };
@@ -325,26 +505,25 @@ export async function createApplication(djId: string, postId: string, message?: 
 
   const invitationConflict = await getActiveInvitationForDjAndGig(djId, postId, currentRound);
   if (invitationConflict.data) {
-    return {
-      data: null,
-      error: new Error("Для этой публикации уже есть активное приглашение"),
-      alreadyApplied: false,
-    };
+    return { data: null, error: new Error("Для этой публикации уже есть активное приглашение"), alreadyApplied: false };
   }
   if (invitationConflict.error) return { data: null, error: invitationConflict.error, alreadyApplied: false };
 
-  const { data, error } = await supabase
-    .from("applications")
-    .insert({ ...toApplicationInsert({ djId, gigId: postId, message }), application_round: currentRound })
-    .select("*, dj_profiles(id, name, user_id), venue_posts(id, title, post_type, event_date, deadline, start_time, venue_id, venue_profiles(id, name, user_id))")
-    .single();
+  const data = await fetchJson<GigApplicationWithGig | null>(
+    `${API_URL}/api/applications`,
+    {
+      method: "POST",
+      body: JSON.stringify({ ...toApplicationInsert({ djId, gigId: postId, message }), application_round: currentRound }),
+    },
+    null,
+  );
 
-  if (!error && data) {
+  if (data) {
     const djCacheKey = `applications-dj:${djId}`;
     const currentDj = getCachedValue<GigApplicationWithGig[]>(djCacheKey, { allowStale: true }) ?? [];
     const nextDj = currentDj.some((application) => application.id === data.id)
-      ? currentDj.map((application) => application.id === data.id ? data as GigApplicationWithGig : application)
-      : [data as GigApplicationWithGig, ...currentDj];
+      ? currentDj.map((application) => application.id === data.id ? data : application)
+      : [data, ...currentDj];
     setCachedValue(djCacheKey, nextDj, CACHE_TTL);
 
     const venueId = (gig as { venue_id?: string | null } | null)?.venue_id ?? null;
@@ -361,30 +540,25 @@ export async function createApplication(djId: string, postId: string, message?: 
     }
   }
 
-  return { data, error, alreadyApplied: false };
+  return { data, error: data ? null : new Error("Не удалось создать отклик"), alreadyApplied: false };
 }
 
 export async function getApplicationForDjAndGig(djId: string, postId: string, applicationRound?: number) {
-  let q = supabase
-    .from("applications")
-    .select("*")
-    .eq("dj_id", djId)
-    .eq("post_id", postId);
-  if (applicationRound) q = q.eq("application_round", applicationRound);
-  const { data, error } = await q.maybeSingle();
-  return { data, error };
+  const data = await fetchJson<any[]>(
+    `${API_URL}/api/applications${toQuery({ djId, postId, applicationRound })}`,
+    undefined,
+    [],
+  );
+  return { data: data[0] ?? null, error: null };
 }
 
 export async function getActiveInvitationForDjAndGig(djId: string, postId: string, applicationRound?: number) {
-  let q = supabase
-    .from("invitations")
-    .select("*")
-    .eq("dj_id", djId)
-    .eq("post_id", postId)
-    .in("status", ["new", "accepted"]);
-  if (applicationRound) q = q.eq("application_round", applicationRound);
-  const { data, error } = await q.limit(1).maybeSingle();
-  return { data, error };
+  const data = await fetchJson<any[]>(
+    `${API_URL}/api/invitations${toQuery({ djId, postId, applicationRound, status: "new,accepted" })}`,
+    undefined,
+    [],
+  );
+  return { data: data[0] ?? null, error: null };
 }
 
 export async function updateApplicationStatus(id: string, status: ApplicationStatusInput): Promise<{
@@ -393,22 +567,24 @@ export async function updateApplicationStatus(id: string, status: ApplicationSta
   chatThread: ChatThread | null;
 }> {
   const dbStatus = toApplicationDbStatus(status);
-  const { data: current, error: currentError } = await supabase
-    .from("applications")
-    .select("id, status, post_id")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (currentError) return { data: null, error: currentError, chatThread: null };
+  const currentList = await fetchJson<any[]>(
+    `${API_URL}/api/applications${toQuery({ id })}`,
+    undefined,
+    [],
+  );
+  const current = currentList[0] ?? null;
   if (!current) return { data: null, error: new Error("Отклик не найден или недоступен для обновления"), chatThread: null };
+
   const shouldCreateBooking = shouldCreateBookingForStatusTransition(current.status, dbStatus);
   if (isApplicationAccepted(dbStatus)) {
     const { data: gig, error: gigError } = await getPostModerationState((current as any).post_id);
     if (gigError) return { data: null, error: gigError, chatThread: null };
+
     const interaction = canInteractWithPost(gig);
     if (!interaction.allowed) {
       return { data: null, error: new Error(interaction.reason ?? "Публикация недоступна"), chatThread: null };
     }
+
     if (shouldCreateBooking) {
       const selection = await getVenuePostSelection((current as any).post_id);
       if (selection.error) return { data: null, error: selection.error, chatThread: null };
@@ -418,28 +594,33 @@ export async function updateApplicationStatus(id: string, status: ApplicationSta
     }
   }
 
-  const { data, error } = await supabase
-    .from("applications")
-    .update({ status: dbStatus })
-    .eq("id", id)
-    .select("id, status")
-    .maybeSingle();
-  if (error) return { data: null, error, chatThread: null };
+  const data = await fetchJson<Pick<GigApplication, "id" | "status"> | null>(
+    `${API_URL}/api/applications/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status: dbStatus }),
+    },
+    null,
+  );
   if (!data) return { data: null, error: new Error("Отклик не найден или недоступен для обновления"), chatThread: null };
 
   let acceptedBooking: BookingRow | null = null;
   if (shouldCreateBooking) {
     const booking = await createBookingForAcceptedApplication(id);
     if (booking.error) {
-      const rollback = await supabase
-        .from("applications")
-        .update({ status: current.status })
-        .eq("id", id);
+      const rollback = await fetchJson<any | null>(
+        `${API_URL}/api/applications/${id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: current.status }),
+        },
+        null,
+      );
 
-      if (rollback.error) {
+      if (!rollback) {
         return {
           data: null,
-          error: new Error(`Бронь не создана: ${booking.error.message}. Не удалось вернуть статус отклика: ${rollback.error.message}`),
+          error: new Error(`Бронь не создана: ${booking.error.message}. Не удалось вернуть статус отклика`),
           chatThread: null,
         };
       }
@@ -462,17 +643,19 @@ export async function updateApplicationStatus(id: string, status: ApplicationSta
     if (thread.error) return { data: null, error: thread.error, chatThread: null };
     chatThread = thread.data;
   }
+
   return { data, error: null, chatThread };
 }
 
 async function updateApplicationVisibility(id: string, actor: ApplicationActor, hidden: boolean) {
-  const { data, error } = await supabase
-    .from("applications")
-    .update(getApplicationVisibilityPatch(actor, hidden))
-    .eq("id", id)
-    .select("id")
-    .maybeSingle();
-  if (error) return { error };
+  const data = await fetchJson<any | null>(
+    `${API_URL}/api/applications/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(getApplicationVisibilityPatch(actor, hidden)),
+    },
+    null,
+  );
   if (!data) return { error: new Error("Отклик не найден или недоступен для обновления") };
   return { error: null };
 }
@@ -494,12 +677,8 @@ export async function restoreApplicationForVenue(id: string) {
 }
 
 export async function checkApplied(djId: string, postId: string): Promise<boolean> {
-  const { data: gig } = await supabase
-    .from("venue_posts")
-    .select("application_round")
-    .eq("id", postId)
-    .maybeSingle();
-  const currentRound = ((gig as any)?.application_round as number | null) ?? 1;
+  const current = await getVenuePostCurrentRound(postId);
+  const currentRound = current.round;
   const [application, invitation] = await Promise.all([
     getApplicationForDjAndGig(djId, postId, currentRound),
     getActiveInvitationForDjAndGig(djId, postId, currentRound),

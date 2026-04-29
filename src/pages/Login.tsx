@@ -6,6 +6,25 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Mail, Lock, Loader2, ArrowLeft } from "lucide-react";
 
+const API_URL = import.meta.env.VITE_API_URL;
+const REQUEST_TIMEOUT_MS = 6000;
+
+async function fetchJson<T>(url: string, fallback: T): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return fallback;
+    const payload = await response.json() as { ok?: boolean; data?: T };
+    return payload.data ?? fallback;
+  } catch {
+    return fallback;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,9 +59,9 @@ const Login = () => {
     // Check profile existence after first navigation so login does not block first useful render.
     const loggedUser = data.user;
     if (loggedUser) {
-      const [{ data: dj }, { data: venue }] = await Promise.all([
-        supabase.from("dj_profiles").select("id").eq("user_id", loggedUser.id).maybeSingle(),
-        supabase.from("venue_profiles").select("id").eq("user_id", loggedUser.id).maybeSingle(),
+      const [dj, venue] = await Promise.all([
+        fetchJson<{ id?: string } | null>(`${API_URL}/api/dj-profile-by-user?userId=${encodeURIComponent(loggedUser.id)}`, null),
+        fetchJson<{ id?: string } | null>(`${API_URL}/api/venue-profile-by-user?userId=${encodeURIComponent(loggedUser.id)}`, null),
       ]);
       if (!dj && !venue) navigate("/role-select");
     }

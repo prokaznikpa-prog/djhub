@@ -26,7 +26,7 @@ const PostListings = () => {
   const [reopeningPost, setReopeningPost] = useState<VenuePost | null>(null);
   const deferredSearch = useDeferredValue(search);
 
-  const { posts: rawPosts, loading, refetch, addPost, updatePost, removePost } = useVenuePosts({
+  const { posts: rawPosts, loading, error, refetch, addPost, updatePost, removePost } = useVenuePosts({
     city: filterCity || undefined,
     style: filterStyle || undefined,
     status: tab,
@@ -161,11 +161,18 @@ const PostListings = () => {
           </div>
         )}
 
-        {loading ? (
+        {loading && posts.length === 0 ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 6 }).map((_, index) => (
               <div key={index} className="h-64 animate-pulse rounded-2xl border border-white/5 bg-[#171a20] shadow-lg" />
             ))}
+          </div>
+        ) : error && posts.length === 0 ? (
+          <div className="text-center py-16 space-y-3">
+            <p className="text-muted-foreground text-sm">{error}</p>
+            <button onClick={() => void refetch({ force: true, forceRefresh: true })} className="text-xs text-primary hover:underline">
+              Попробовать снова
+            </button>
           </div>
         ) : posts.length === 0 ? (
           <div className="text-center py-16 space-y-3">

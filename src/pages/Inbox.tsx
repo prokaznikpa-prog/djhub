@@ -15,7 +15,6 @@ import { canUserLeaveBookingReview, createBookingReview, getReviewForBooking } f
 import { createNotification } from "@/domains/notifications/notifications.hooks";
 import { useChatMessages, useChatThreadPreviews, useChatThreads } from "@/hooks/useChatFlow";
 import { hideChatThreadForParticipant, resolveOtherParticipantLabel, resolveSenderLabel, sendChatMessage } from "@/lib/chatFlow";
-import { supabase } from "@/integrations/supabase/client";
 import { getGigTypeLabel } from "@/lib/gigs";
 import {
   canDjCancelApplication,
@@ -370,6 +369,7 @@ const InboxPage = () => {
               participant={chatParticipant}
               threads={chatThreads.threads}
               loading={chatThreads.loading}
+              error={chatThreads.error}
               focusThreadId={focusThreadId}
               onFocusedThread={() => setFocusThreadId(null)}
               removeThreadLocal={chatThreads.removeThreadLocal}
@@ -393,6 +393,7 @@ const BookingChat = memo(({
   participant,
   threads,
   loading,
+  error,
   focusThreadId,
   onFocusedThread,
   removeThreadLocal,
@@ -402,6 +403,7 @@ const BookingChat = memo(({
   participant: ChatParticipant;
   threads: ChatThread[];
   loading: boolean;
+  error: string | null;
   focusThreadId: string | null;
   onFocusedThread: () => void;
   removeThreadLocal: (threadId: string) => void;
@@ -532,8 +534,10 @@ const BookingChat = memo(({
       </div>
       {collapsed ? null : (
       <div className="p-3">
-      {loading ? (
+      {loading && visibleThreads.length === 0 ? (
         <p className="text-sm text-muted-foreground">Загружаем чаты...</p>
+      ) : error && visibleThreads.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{error}</p>
       ) : visibleThreads.length === 0 ? (
         <p className="text-sm text-muted-foreground">У вас пока нет активных чатов</p>
       ) : (
@@ -645,7 +649,7 @@ const ChatMessages = memo(({
   onRefreshThread: (threadId: string) => Promise<ChatThread | null> | ChatThread | null;
 }) => {
   const { user } = useAuth();
-  const { messages, loading, appendMessage, replaceMessage, removeMessage } = useChatMessages(thread, participant, user?.id ?? null);
+  const { messages, loading, error, appendMessage, replaceMessage, removeMessage } = useChatMessages(thread, participant, user?.id ?? null);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -776,8 +780,10 @@ const ChatMessages = memo(({
         }}
         className="h-[22rem] overflow-y-auto bg-black/10 px-3 py-3 sm:h-[392px] sm:px-4 sm:py-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
       >
-        {loading ? (
+        {loading && messages.length === 0 ? (
           <p className="text-xs text-muted-foreground">Загружаем сообщения...</p>
+        ) : error && messages.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{error}</p>
         ) : messages.length === 0 ? (
           <div className="premium-surface p-4 text-center">
             <p className="text-sm font-medium text-foreground">Диалог создан и готов к обсуждению деталей</p>
@@ -884,9 +890,9 @@ const ChatMessages = memo(({
 });
 
 const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; userId: string; onChatThreadReady: (thread: ChatThread) => void }) => {
-  const { invites, updateLocal: updateInviteLocal } = useInvitationsForDj(djProfile.id);
+  const { invites, loading: invitesLoading, error: invitesError, updateLocal: updateInviteLocal } = useInvitationsForDj(djProfile.id);
   const [appVisibility, setAppVisibility] = useState<ApplicationVisibility>("active");
-  const { apps, loading: appsLoading, hideLocal: hideDjAppLocal, updateStatusLocal: updateDjAppStatusLocal } = useApplicationsForDj(djProfile.id, appVisibility);
+  const { apps, loading: appsLoading, error: appsError, hideLocal: hideDjAppLocal, updateStatusLocal: updateDjAppStatusLocal } = useApplicationsForDj(djProfile.id, appVisibility);
   const [pendingInviteAction, setPendingInviteAction] = useState<string | null>(null);
 
   const handleAccept = async (inv: any) => {
@@ -959,7 +965,11 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
       {/* Invitations */}
       <section className="space-y-3">
         <h2 className="text-lg font-bold flex items-center gap-2"><Mail className="h-4 w-4 text-primary" /> Приглашения</h2>
-        {invites.length === 0 ? (
+        {invitesLoading && invites.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Загрузка приглашений...</p>
+        ) : invitesError && invites.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{invitesError}</p>
+        ) : invites.length === 0 ? (
           <p className="text-sm text-muted-foreground">Нет приглашений</p>
         ) : (
           <div className="max-h-[30vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[220px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
@@ -995,8 +1005,10 @@ const DjInbox = ({ djProfile, userId, onChatThreadReady }: { djProfile: any; use
           <h2 className="text-lg font-bold flex items-center gap-2"><Send className="h-4 w-4 text-primary" /> Мои отклики</h2>
           <ApplicationVisibilityTabs value={appVisibility} onChange={setAppVisibility} />
         </div>
-        {appsLoading ? (
+        {appsLoading && apps.length === 0 ? (
           <p className="text-sm text-muted-foreground">Загрузка откликов...</p>
+        ) : appsError && apps.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{appsError}</p>
         ) : apps.length === 0 ? (
           <p className="text-sm text-muted-foreground">{appVisibility === "active" ? "Пока нет откликов" : "Скрытых откликов нет"}</p>
         ) : (
@@ -1046,8 +1058,8 @@ const VenueInbox = ({
   onChatThreadReady: (thread: ChatThread) => void;
 }) => {
   const [appVisibility, setAppVisibility] = useState<ApplicationVisibility>("active");
-  const { apps, loading: appsLoading, hideLocal: hideVenueAppLocal, updateStatusLocal: updateVenueAppStatusLocal } = useApplicationsForVenue(venueProfile.id, appVisibility);
-  const { invites, updateLocal: updateVenueInviteLocal } = useInvitationsForVenue(venueProfile.id);
+  const { apps, loading: appsLoading, error: appsError, hideLocal: hideVenueAppLocal, updateStatusLocal: updateVenueAppStatusLocal } = useApplicationsForVenue(venueProfile.id, appVisibility);
+  const { invites, loading: invitesLoading, error: invitesError, updateLocal: updateVenueInviteLocal } = useInvitationsForVenue(venueProfile.id);
   const [pendingAppAction, setPendingAppAction] = useState<string | null>(null);
 
   const handleAcceptApp = async (app: any) => {
@@ -1123,8 +1135,10 @@ const VenueInbox = ({
           <h2 className="text-lg font-bold flex items-center gap-2"><Send className="h-4 w-4 text-primary" /> Отклики на мои публикации</h2>
           <ApplicationVisibilityTabs value={appVisibility} onChange={setAppVisibility} />
         </div>
-        {appsLoading ? (
+        {appsLoading && apps.length === 0 ? (
           <p className="text-sm text-muted-foreground">Загрузка откликов...</p>
+        ) : appsError && apps.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{appsError}</p>
         ) : apps.length === 0 ? (
           <p className="text-sm text-muted-foreground">{appVisibility === "active" ? "Пока нет откликов" : "Скрытых откликов нет"}</p>
         ) : (
@@ -1163,7 +1177,11 @@ const VenueInbox = ({
       {/* My sent invitations */}
       <section className="space-y-3">
         <h2 className="text-lg font-bold flex items-center gap-2"><Mail className="h-4 w-4 text-primary" /> Мои приглашения</h2>
-        {invites.length === 0 ? (
+        {invitesLoading && invites.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Загрузка приглашений...</p>
+        ) : invitesError && invites.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{invitesError}</p>
+        ) : invites.length === 0 ? (
           <p className="text-sm text-muted-foreground">Нет приглашений</p>
         ) : (
           <div className="max-h-[30vh] space-y-1 overflow-y-auto pr-1 sm:max-h-[220px] [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent">
