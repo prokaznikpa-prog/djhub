@@ -133,6 +133,10 @@ readStoredProfile<VenueProfile>("djhub_venue_profile")
 const initializedRef = useRef(false);
 const djProfileRef = useRef<DjProfile | null>(djProfile);
 const venueProfileRef = useRef<VenueProfile | null>(venueProfile);
+const profileRequestIdRef = useRef(0);
+const profileInFlightRef = useRef(false);
+const profileInFlightPromiseRef = useRef<Promise<void> | null>(null);
+const profileLoadKeyRef = useRef<string | null>(null);
 
 useEffect(() => {
 djProfileRef.current = djProfile;
@@ -161,6 +165,10 @@ schedulePrivateWarmup(djProfileRef.current, nextVenue);
 
 const loadUserData = async (currentUser: User | null, accessToken?: string | null) => {
 if (!currentUser) {
+profileRequestIdRef.current += 1;
+profileInFlightRef.current = false;
+profileInFlightPromiseRef.current = null;
+profileLoadKeyRef.current = null;
 setUser(null);
 setIsAdmin(false);
 setProfilesLoading(false);
@@ -173,57 +181,78 @@ return;
 }
 
 setUser(currentUser);
+const requestKey = `${currentUser.id}:${accessToken ?? "no-token"}`;
+if (profileInFlightRef.current && profileLoadKeyRef.current === requestKey) {
+  return profileInFlightPromiseRef.current ?? Promise.resolve();
+}
+
 setProfilesLoading(true);
+const currentRequestId = ++profileRequestIdRef.current;
+profileLoadKeyRef.current = requestKey;
 
-try {
-const summary = await withTimeout(
-fetchProfileSummary(accessToken),
-PROFILE_TIMEOUT_MS,
-"loadUserData"
-);
+const request = (async () => {
+  try {
+    const summary = await withTimeout(
+      fetchProfileSummary(accessToken),
+      PROFILE_TIMEOUT_MS,
+      "loadUserData"
+    );
 
-setIsAdmin(!!summary.isAdmin);
+    if (currentRequestId !== profileRequestIdRef.current) return;
 
-const dj = mapDjFromDb(summary.djProfile);
-const djForUi = mapDjToLocalStorage(dj) as DjProfile | null;
+    setIsAdmin(!!summary.isAdmin);
 
-const venue = mapVenueFromDb(summary.venueProfile);
-const venueForUi = mapVenueToLocalStorage(venue) as VenueProfile | null;
+    const dj = mapDjFromDb(summary.djProfile);
+    const djForUi = mapDjToLocalStorage(dj) as DjProfile | null;
 
-const currentDj = djProfileRef.current;
-const currentVenue = venueProfileRef.current;
-const shouldKeepExistingProfiles =
-  !hasAnyProfile(djForUi, venueForUi) && hasAnyProfile(currentDj, currentVenue);
+    const venue = mapVenueFromDb(summary.venueProfile);
+    const venueForUi = mapVenueToLocalStorage(venue) as VenueProfile | null;
 
-if (shouldKeepExistingProfiles) {
-  syncProfileToLocalStorage(currentDj, currentVenue);
-  schedulePrivateWarmup(currentDj, currentVenue);
-  return;
-}
+    const currentDj = djProfileRef.current;
+    const currentVenue = venueProfileRef.current;
+    const shouldKeepExistingProfiles =
+      !hasAnyProfile(djForUi, venueForUi) && hasAnyProfile(currentDj, currentVenue);
 
-setDjProfile(djForUi);
-setVenueProfile(venueForUi);
-djProfileRef.current = djForUi;
-venueProfileRef.current = venueForUi;
+    if (shouldKeepExistingProfiles) {
+      syncProfileToLocalStorage(currentDj, currentVenue);
+      schedulePrivateWarmup(currentDj, currentVenue);
+      return;
+    }
 
-syncProfileToLocalStorage(djForUi, venueForUi);
-schedulePrivateWarmup(djForUi, venueForUi);
-} catch (error) {
-console.warn("Auth profiles unavailable, keeping current/local profile state", error);
+    setDjProfile(djForUi);
+    setVenueProfile(venueForUi);
+    djProfileRef.current = djForUi;
+    venueProfileRef.current = venueForUi;
 
-const storedDj = readStoredProfile<DjProfile>("djhub_dj_profile");
-const storedVenue = readStoredProfile<VenueProfile>("djhub_venue_profile");
-const nextDj = djProfileRef.current ?? storedDj;
-const nextVenue = venueProfileRef.current ?? storedVenue;
-setDjProfile(nextDj);
-setVenueProfile(nextVenue);
-djProfileRef.current = nextDj;
-venueProfileRef.current = nextVenue;
-syncProfileToLocalStorage(nextDj, nextVenue);
-schedulePrivateWarmup(nextDj, nextVenue);
-} finally {
-setProfilesLoading(false);
-}
+    syncProfileToLocalStorage(djForUi, venueForUi);
+    schedulePrivateWarmup(djForUi, venueForUi);
+  } catch (error) {
+    if (currentRequestId !== profileRequestIdRef.current) return;
+
+    console.warn("Auth profiles unavailable, keeping current/local profile state", error);
+
+    const storedDj = readStoredProfile<DjProfile>("djhub_dj_profile");
+    const storedVenue = readStoredProfile<VenueProfile>("djhub_venue_profile");
+    const nextDj = djProfileRef.current ?? storedDj;
+    const nextVenue = venueProfileRef.current ?? storedVenue;
+    setDjProfile(nextDj);
+    setVenueProfile(nextVenue);
+    djProfileRef.current = nextDj;
+    venueProfileRef.current = nextVenue;
+    syncProfileToLocalStorage(nextDj, nextVenue);
+    schedulePrivateWarmup(nextDj, nextVenue);
+  } finally {
+    if (currentRequestId === profileRequestIdRef.current) {
+      setProfilesLoading(false);
+      profileInFlightRef.current = false;
+      profileInFlightPromiseRef.current = null;
+    }
+  }
+})();
+
+profileInFlightRef.current = true;
+profileInFlightPromiseRef.current = request;
+return request;
 };
 
 useEffect(() => {
@@ -297,47 +326,13 @@ syncProfileToLocalStorage(null, null);
 const refreshProfiles = async () => {
 if (!user) return;
 
-setProfilesLoading(true);
-
 try {
 const {
 data: { session },
 } = await withTimeout(supabase.auth.getSession(), AUTH_TIMEOUT_MS, "getSession");
-
-const summary = await withTimeout(
-fetchProfileSummary(session?.access_token ?? null),
-PROFILE_TIMEOUT_MS,
-"refreshProfiles"
-);
-
-setIsAdmin(!!summary.isAdmin);
-
-const dj = mapDjFromDb(summary.djProfile);
-const djForUi = mapDjToLocalStorage(dj) as DjProfile | null;
-
-const venue = mapVenueFromDb(summary.venueProfile);
-const venueForUi = mapVenueToLocalStorage(venue) as VenueProfile | null;
-
-const shouldKeepExistingProfiles =
-  !hasAnyProfile(djForUi, venueForUi) && hasAnyProfile(djProfileRef.current, venueProfileRef.current);
-
-if (shouldKeepExistingProfiles) {
-  syncProfileToLocalStorage(djProfileRef.current, venueProfileRef.current);
-  schedulePrivateWarmup(djProfileRef.current, venueProfileRef.current);
-  return;
-}
-
-setDjProfile(djForUi);
-setVenueProfile(venueForUi);
-djProfileRef.current = djForUi;
-venueProfileRef.current = venueForUi;
-
-syncProfileToLocalStorage(djForUi, venueForUi);
-schedulePrivateWarmup(djForUi, venueForUi);
+await loadUserData(user, session?.access_token ?? null);
 } catch (error) {
 console.warn("Failed to refresh profiles, keeping current/local profile state", error);
-} finally {
-setProfilesLoading(false);
 }
 };
 

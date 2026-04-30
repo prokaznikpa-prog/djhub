@@ -147,6 +147,7 @@ export function useInvitationsForDj(djId: string | undefined) {
   const inFlightRef = useRef(false);
   const lastFetchAtRef = useRef(0);
   const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const requestIdRef = useRef(0);
   const invitesRef = useRef<DjInvitation[]>(cacheSnapshot.value ?? []);
 
   useEffect(() => {
@@ -154,6 +155,7 @@ export function useInvitationsForDj(djId: string | undefined) {
   }, [invites]);
 
   const fetch = async (opts?: { force?: boolean; silent?: boolean }) => {
+    const currentRequestId = ++requestIdRef.current;
     if (!djId) {
       setInvites([]);
       setLoading(false);
@@ -177,6 +179,7 @@ export function useInvitationsForDj(djId: string | undefined) {
         );
 
         const data = await loader();
+        if (currentRequestId !== requestIdRef.current) return;
         if (!data.ok) {
           setError("Не удалось загрузить приглашения");
           return;
@@ -188,7 +191,9 @@ export function useInvitationsForDj(djId: string | undefined) {
       } finally {
         inFlightRef.current = false;
         inFlightPromiseRef.current = null;
-        setLoading(false);
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
     })();
 
@@ -249,6 +254,7 @@ export function useInvitationsForVenue(venueId: string | undefined) {
   const inFlightRef = useRef(false);
   const lastFetchAtRef = useRef(0);
   const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const requestIdRef = useRef(0);
   const invitesRef = useRef<VenueInvitation[]>(cacheSnapshot.value ?? []);
 
   useEffect(() => {
@@ -256,6 +262,7 @@ export function useInvitationsForVenue(venueId: string | undefined) {
   }, [invites]);
 
   const fetch = async (opts?: { force?: boolean; silent?: boolean }) => {
+    const currentRequestId = ++requestIdRef.current;
     if (!venueId) {
       setInvites([]);
       setLoading(false);
@@ -279,6 +286,7 @@ export function useInvitationsForVenue(venueId: string | undefined) {
         );
 
         const data = await loader();
+        if (currentRequestId !== requestIdRef.current) return;
         if (!data.ok) {
           setError("Не удалось загрузить приглашения");
           return;
@@ -290,7 +298,9 @@ export function useInvitationsForVenue(venueId: string | undefined) {
       } finally {
         inFlightRef.current = false;
         inFlightPromiseRef.current = null;
-        setLoading(false);
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
     })();
 

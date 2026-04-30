@@ -230,6 +230,7 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
   const inFlightRef = useRef(false);
   const lastFetchAtRef = useRef(0);
   const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const requestIdRef = useRef(0);
   const appsRef = useRef<GigApplicationWithGig[]>(cacheSnapshot.value ?? []);
 
   useEffect(() => {
@@ -237,6 +238,7 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
   }, [allApps]);
 
   const fetch = async (opts?: { silent?: boolean; force?: boolean }) => {
+    const currentRequestId = ++requestIdRef.current;
     if (!djId) {
       setAllApps([]);
       setLoading(false);
@@ -260,6 +262,7 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
         );
 
         const data = await loader();
+        if (currentRequestId !== requestIdRef.current) return;
         if (!data.ok) {
           setError("Не удалось загрузить отклики");
           return;
@@ -269,12 +272,15 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
         setCachedValue(cacheKey, data.data, CACHE_TTL);
         setAllApps(data.data);
       } catch (error) {
+        if (currentRequestId !== requestIdRef.current) return;
         console.error("Failed to load DJ applications", error);
         setError("Не удалось загрузить отклики");
       } finally {
         inFlightRef.current = false;
         inFlightPromiseRef.current = null;
-        setLoading(false);
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
     })();
 
@@ -356,6 +362,7 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
   const inFlightRef = useRef(false);
   const lastFetchAtRef = useRef(0);
   const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const requestIdRef = useRef(0);
   const appsRef = useRef<GigApplicationForVenue[]>(cacheSnapshot.value ?? []);
 
   useEffect(() => {
@@ -363,6 +370,7 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
   }, [allApps]);
 
   const fetch = async (opts?: { silent?: boolean; force?: boolean }) => {
+    const currentRequestId = ++requestIdRef.current;
     if (!venueId) {
       setAllApps([]);
       setLoading(false);
@@ -386,6 +394,7 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
         );
 
         const data = await loader();
+        if (currentRequestId !== requestIdRef.current) return;
         if (!data.ok) {
           setError("Не удалось загрузить отклики");
           return;
@@ -395,12 +404,15 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
         setCachedValue(cacheKey, data.data, CACHE_TTL);
         setAllApps(data.data);
       } catch (error) {
+        if (currentRequestId !== requestIdRef.current) return;
         console.error("Failed to load venue applications", error);
         setError("Не удалось загрузить отклики");
       } finally {
         inFlightRef.current = false;
         inFlightPromiseRef.current = null;
-        setLoading(false);
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
     })();
 

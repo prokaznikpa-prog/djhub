@@ -237,12 +237,15 @@ const [loading, setLoading] = useState(() => !cacheSnapshot.value);
 const [error, setError] = useState<string | null>(null);
 const requestId = useRef(0);
 const postsRef = useRef<VenuePost[]>(cacheSnapshot.value ?? []);
+const inFlightRef = useRef(false);
+const inFlightPromiseRef = useRef<Promise<void> | null>(null);
 
 useEffect(() => {
 postsRef.current = posts;
 }, [posts]);
 
 const fetch = async (opts?: { silent?: boolean; force?: boolean; forceRefresh?: boolean }) => {
+if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
 const currentRequestId = ++requestId.current;
 
 if (filters?.status === "closed" && !filters?.venueId) {
@@ -256,29 +259,37 @@ return;
 if (!opts?.silent && postsRef.current.length === 0) setLoading(true);
 
 console.time("posts load");
+inFlightRef.current = true;
+const request = (async () => {
+  try {
+    const run = async () => fetchPublicOpenVenuePostsProxyFirst(filters, !!opts?.forceRefresh);
 
-const request = async () => {
-return fetchPublicOpenVenuePostsProxyFirst(filters, !!opts?.forceRefresh);
-};
+    const result = opts?.force || opts?.forceRefresh
+      ? await run()
+      : await cachedRequest(cacheKey, run, CACHE_TTL);
 
-const result = opts?.force || opts?.forceRefresh
-? await request()
-: await cachedRequest(cacheKey, request, CACHE_TTL);
+    console.timeEnd("posts load");
 
-console.timeEnd("posts load");
+    if (currentRequestId !== requestId.current) return;
 
-if (currentRequestId !== requestId.current) return;
+    if (result === null) {
+      setError("Не удалось загрузить публикации");
+      setLoading(false);
+      return;
+    }
 
-if (result === null) {
-setError("Не удалось загрузить публикации");
-setLoading(false);
-return;
-}
+    setError(null);
+    setCachedValue(cacheKey, result, CACHE_TTL);
+    setPosts(result);
+    setLoading(false);
+  } finally {
+    inFlightRef.current = false;
+    inFlightPromiseRef.current = null;
+  }
+})();
 
-setError(null);
-setCachedValue(cacheKey, result, CACHE_TTL);
-setPosts(result);
-setLoading(false);
+inFlightPromiseRef.current = request;
+return request;
 };
 
 useEffect(() => {
@@ -339,12 +350,15 @@ const [loading, setLoading] = useState(() => !cacheSnapshot.value);
 const [error, setError] = useState<string | null>(null);
 const requestId = useRef(0);
 const postsRef = useRef<VenuePost[]>(cacheSnapshot.value ?? []);
+const inFlightRef = useRef(false);
+const inFlightPromiseRef = useRef<Promise<void> | null>(null);
 
 useEffect(() => {
 postsRef.current = posts;
 }, [posts]);
 
 const fetch = async (opts?: { force?: boolean; silent?: boolean }) => {
+if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
 const currentRequestId = ++requestId.current;
 
 if (!venueId) {
@@ -356,24 +370,33 @@ return;
 
 if (!opts?.silent && postsRef.current.length === 0) setLoading(true);
 
-const request = async () => {
-return fetchVenuePostsFromBackend({ venueId }, false);
-};
+inFlightRef.current = true;
+const request = (async () => {
+  try {
+    const run = async () => fetchVenuePostsFromBackend({ venueId }, false);
 
-const data = opts?.force ? await request() : await cachedRequest(cacheKey, request, CACHE_TTL);
+    const data = opts?.force ? await run() : await cachedRequest(cacheKey, run, CACHE_TTL);
 
-if (currentRequestId !== requestId.current) return;
+    if (currentRequestId !== requestId.current) return;
 
-if (data === null) {
-setError("Не удалось загрузить публикации");
-setLoading(false);
-return;
-}
+    if (data === null) {
+      setError("Не удалось загрузить публикации");
+      setLoading(false);
+      return;
+    }
 
-setError(null);
-setCachedValue(cacheKey, data, CACHE_TTL);
-setPosts(data);
-setLoading(false);
+    setError(null);
+    setCachedValue(cacheKey, data, CACHE_TTL);
+    setPosts(data);
+    setLoading(false);
+  } finally {
+    inFlightRef.current = false;
+    inFlightPromiseRef.current = null;
+  }
+})();
+
+inFlightPromiseRef.current = request;
+return request;
 };
 
 useEffect(() => {
