@@ -203,6 +203,7 @@ export function useInvitationsForDj(djId: string | undefined) {
 
   useEffect(() => {
     const snapshot = getCacheSnapshot<DjInvitation[]>(cacheKey);
+    const shouldFetchOnMount = !(snapshot.exists && !snapshot.isStale);
     if (snapshot.value) {
       setInvites(snapshot.value);
       setLoading(false);
@@ -212,24 +213,26 @@ export function useInvitationsForDj(djId: string | undefined) {
       setLoading(true);
     }
 
-    if (!(snapshot.exists && !snapshot.isStale)) {
+    if (shouldFetchOnMount) {
       if (snapshot.value) void fetch({ force: true, silent: true });
       else void fetch();
     }
 
     if (!djId) return;
 
+    let intervalId: number | null = null;
     const timeoutId = window.setTimeout(() => {
       void fetch({ force: true, silent: true });
-    }, INITIAL_INTERVAL_DELAY_MS);
-
-    const intervalId = window.setInterval(() => {
-      void fetch({ force: true, silent: true });
-    }, POLL_INTERVAL_MS + INITIAL_INTERVAL_DELAY_MS);
+      intervalId = window.setInterval(() => {
+        void fetch({ force: true, silent: true });
+      }, POLL_INTERVAL_MS);
+    }, shouldFetchOnMount ? POLL_INTERVAL_MS : INITIAL_INTERVAL_DELAY_MS);
 
     return () => {
       window.clearTimeout(timeoutId);
-      window.clearInterval(intervalId);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
     };
   }, [cacheKey, djId]);
 
@@ -310,6 +313,7 @@ export function useInvitationsForVenue(venueId: string | undefined) {
 
   useEffect(() => {
     const snapshot = getCacheSnapshot<VenueInvitation[]>(cacheKey);
+    const shouldFetchOnMount = !(snapshot.exists && !snapshot.isStale);
     if (snapshot.value) {
       setInvites(snapshot.value);
       setLoading(false);
@@ -319,24 +323,26 @@ export function useInvitationsForVenue(venueId: string | undefined) {
       setLoading(true);
     }
 
-    if (!(snapshot.exists && !snapshot.isStale)) {
+    if (shouldFetchOnMount) {
       if (snapshot.value) void fetch({ force: true, silent: true });
       else void fetch();
     }
 
     if (!venueId) return;
 
+    let intervalId: number | null = null;
     const timeoutId = window.setTimeout(() => {
       void fetch({ force: true, silent: true });
-    }, INITIAL_INTERVAL_DELAY_MS);
-
-    const intervalId = window.setInterval(() => {
-      void fetch({ force: true, silent: true });
-    }, POLL_INTERVAL_MS + INITIAL_INTERVAL_DELAY_MS);
+      intervalId = window.setInterval(() => {
+        void fetch({ force: true, silent: true });
+      }, POLL_INTERVAL_MS);
+    }, shouldFetchOnMount ? POLL_INTERVAL_MS : INITIAL_INTERVAL_DELAY_MS);
 
     return () => {
       window.clearTimeout(timeoutId);
-      window.clearInterval(intervalId);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
     };
   }, [cacheKey, venueId]);
 

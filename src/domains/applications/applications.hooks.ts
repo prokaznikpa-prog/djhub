@@ -290,6 +290,7 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
 
   useEffect(() => {
     const snapshot = getCacheSnapshot<GigApplicationWithGig[]>(cacheKey);
+    const shouldFetchOnMount = !(snapshot.exists && !snapshot.isStale);
 
     if (snapshot.value) {
       setAllApps(snapshot.value);
@@ -302,7 +303,7 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
 
     if (!djId) return;
 
-    if (!(snapshot.exists && !snapshot.isStale)) {
+    if (shouldFetchOnMount) {
       if (snapshot.value) {
         void fetch({ silent: true, force: true });
       } else {
@@ -310,17 +311,19 @@ export function useApplicationsForDj(djId: string | undefined, visibility: Appli
       }
     }
 
+    let intervalId: number | null = null;
     const timeoutId = window.setTimeout(() => {
       void fetch({ silent: true, force: true });
-    }, INITIAL_INTERVAL_DELAY_MS);
-
-    const intervalId = window.setInterval(() => {
-      void fetch({ silent: true, force: true });
-    }, POLL_INTERVAL_MS + INITIAL_INTERVAL_DELAY_MS);
+      intervalId = window.setInterval(() => {
+        void fetch({ silent: true, force: true });
+      }, POLL_INTERVAL_MS);
+    }, shouldFetchOnMount ? POLL_INTERVAL_MS : INITIAL_INTERVAL_DELAY_MS);
 
     return () => {
       window.clearTimeout(timeoutId);
-      window.clearInterval(intervalId);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
     };
   }, [cacheKey, djId]);
 
@@ -422,6 +425,7 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
 
   useEffect(() => {
     const snapshot = getCacheSnapshot<GigApplicationForVenue[]>(cacheKey);
+    const shouldFetchOnMount = !(snapshot.exists && !snapshot.isStale);
 
     if (snapshot.value) {
       setAllApps(snapshot.value);
@@ -434,7 +438,7 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
 
     if (!venueId) return;
 
-    if (!(snapshot.exists && !snapshot.isStale)) {
+    if (shouldFetchOnMount) {
       if (snapshot.value) {
         void fetch({ silent: true, force: true });
       } else {
@@ -442,17 +446,19 @@ export function useApplicationsForVenue(venueId: string | undefined, visibility:
       }
     }
 
+    let intervalId: number | null = null;
     const timeoutId = window.setTimeout(() => {
       void fetch({ silent: true, force: true });
-    }, INITIAL_INTERVAL_DELAY_MS);
-
-    const intervalId = window.setInterval(() => {
-      void fetch({ silent: true, force: true });
-    }, POLL_INTERVAL_MS + INITIAL_INTERVAL_DELAY_MS);
+      intervalId = window.setInterval(() => {
+        void fetch({ silent: true, force: true });
+      }, POLL_INTERVAL_MS);
+    }, shouldFetchOnMount ? POLL_INTERVAL_MS : INITIAL_INTERVAL_DELAY_MS);
 
     return () => {
       window.clearTimeout(timeoutId);
-      window.clearInterval(intervalId);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
     };
   }, [cacheKey, venueId]);
 

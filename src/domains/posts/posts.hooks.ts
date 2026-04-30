@@ -245,9 +245,6 @@ postsRef.current = posts;
 }, [posts]);
 
 const fetch = async (opts?: { silent?: boolean; force?: boolean; forceRefresh?: boolean }) => {
-if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
-const currentRequestId = ++requestId.current;
-
 if (filters?.status === "closed" && !filters?.venueId) {
 setPosts([]);
 setCachedValue(cacheKey, [] as VenuePost[], CACHE_TTL);
@@ -255,6 +252,9 @@ setError(null);
 setLoading(false);
 return;
 }
+
+if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
+const currentRequestId = ++requestId.current;
 
 if (!opts?.silent && postsRef.current.length === 0) setLoading(true);
 
@@ -358,15 +358,15 @@ postsRef.current = posts;
 }, [posts]);
 
 const fetch = async (opts?: { force?: boolean; silent?: boolean }) => {
-if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
-const currentRequestId = ++requestId.current;
-
 if (!venueId) {
 setPosts([]);
 setError(null);
 setLoading(false);
 return;
 }
+
+if (inFlightRef.current) return inFlightPromiseRef.current ?? Promise.resolve();
+const currentRequestId = ++requestId.current;
 
 if (!opts?.silent && postsRef.current.length === 0) setLoading(true);
 
